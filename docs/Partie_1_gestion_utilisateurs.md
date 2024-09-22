@@ -1,5 +1,5 @@
  
-Pour créer une API REST en .NET qui gère les utilisateurs et intègre Swagger pour la documentation, nous allons utiliser ASP.NET Core avec Entity Framework Core pour interagir avec une base de données MariaDB. Voici les étapes détaillées pour le projet `src` du dépot `API-REST-DotNet-Library` :
+Pour créer une API REST en .NET qui gère les utilisateurs et intègre Swagger pour la documentation, nous allons utiliser ASP.NET Core avec Entity Framework Core pour interagir avec une base de données MariaDB. Voici les étapes détaillées pour le projet `LibraryApi` du dépot `API-REST-DotNet-Library` :
 
 ### Prérequis
 
