@@ -1,4 +1,9 @@
- 
+### **Gestion des utilisateurs :**
+   - **Inscription et connexion** : Permettre aux utilisateurs de créer un compte, se connecter et se déconnecter.
+   - **Gestion des profils** : Les utilisateurs peuvent mettre à jour leurs informations (nom, email, photo de profil, etc.).
+   - **Rôles et autorisations** : Implémenter différents rôles (ex. administrateur, utilisateur standard) avec des permissions spécifiques.
+
+
 Pour créer une API REST en .NET qui gère les utilisateurs et intègre Swagger pour la documentation, nous allons utiliser ASP.NET Core avec Entity Framework Core pour interagir avec une base de données MariaDB. Voici les étapes détaillées pour le projet `LibraryApi` du dépot `API-REST-DotNet-Library` :
 
 ### Prérequis
