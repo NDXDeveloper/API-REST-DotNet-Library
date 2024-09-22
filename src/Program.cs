@@ -1,44 +1,134 @@
+// Importation des bibliothèques nécessaires pour utiliser Entity Framework Core avec un fournisseur de base de données
+using Microsoft.EntityFrameworkCore; 
+// Importation des bibliothèques nécessaires pour configurer l'authentification via JWT (JSON Web Token) dans une application ASP.NET Core
+using Microsoft.AspNetCore.Authentication.JwtBearer; 
+// Importation des bibliothèques pour gérer la validation des jetons JWT, notamment pour les configurations de sécurité
+using Microsoft.IdentityModel.Tokens; 
+// Importation de System.Text pour encoder les clés de sécurité sous forme de chaînes de caractères (UTF8)
+using System.Text; 
+// Importation de la gestion des identités (utilisateurs, rôles) dans ASP.NET Core via Identity
+using Microsoft.AspNetCore.Identity; 
+// Importation des bibliothèques nécessaires pour configurer Swagger, un outil de documentation d'API
+using Microsoft.OpenApi.Models; 
+
+// Initialisation du constructeur d'application Web avec les paramètres passés (ici, les arguments d'exécution)
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Configuration de la chaîne de connexion à MariaDB
+// Ceci ajoute le service de contexte de base de données à l'application, en précisant que nous utilisons MariaDB comme SGBD
+// "ApplicationDbContext" est une classe qui représente le contexte de la base de données dans Entity Framework
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    // Configuration pour utiliser MySQL (MariaDB) avec les informations de connexion définies dans appsettings.json sous "MariaDBConnection"
+    options.UseMySql(builder.Configuration.GetConnectionString("MariaDBConnection"),
+    // Définition de la version spécifique de MySQL/MariaDB utilisée (ici, la version 10.6.4)
+    new MySqlServerVersion(new Version(10, 6, 4)))
+);
 
+// Ajout du système d'authentification avec Identity
+// "Identity" est un système intégré à ASP.NET Core pour la gestion des utilisateurs et des rôles
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>() 
+    // Stocke les informations des utilisateurs et des rôles dans la base de données via Entity Framework
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    // Ajoute des fournisseurs de jetons (utilisés par exemple pour la gestion des tokens de réinitialisation de mot de passe, de vérification des emails, etc.)
+    .AddDefaultTokenProviders();
+
+// Configuration de l'authentification via JWT (JSON Web Token)
+// Ici, on configure l'application pour qu'elle utilise JWT comme méthode d'authentification
+builder.Services.AddAuthentication(options =>
+{
+    // Définit le schéma d'authentification par défaut pour cette application en tant que JWT
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    // Définit le schéma d'authentification à utiliser en cas de défi d'authentification (par exemple, quand un utilisateur non authentifié tente d'accéder à une ressource protégée)
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+// Configuration spécifique du traitement des jetons JWT pour leur validation
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        // Exige que l'émetteur du jeton soit validé (pour s'assurer que le jeton provient d'une source de confiance)
+        ValidateIssuer = true,
+        // Exige que l'audience du jeton soit validée (pour s'assurer que le jeton est destiné à cette application)
+        ValidateAudience = true,
+        // Exige que la durée de vie du jeton soit validée (pour éviter d'accepter des jetons expirés)
+        ValidateLifetime = true,
+        // Exige que la clé de signature du jeton soit validée (pour s'assurer que le jeton n'a pas été altéré)
+        ValidateIssuerSigningKey = true,
+        // Spécifie l'émetteur valide du jeton (généralement l'URL de l'API ou du serveur d'authentification)
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        // Spécifie l'audience valide du jeton (qui doit être le consommateur du jeton, par exemple une application cliente)
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        // Clé utilisée pour signer le jeton, encodée en UTF-8
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+    };
+});
+
+// Ajout des services de contrôleurs API à l'application
+// Cela permet à l'application de reconnaître et gérer les requêtes HTTP dirigées vers les points de terminaison définis dans les contrôleurs
+builder.Services.AddControllers(); 
+
+// Ajout de Swagger pour générer la documentation de l'API
+// Swagger génère automatiquement une interface graphique interactive et un fichier JSON décrivant les routes et points de terminaison de l'API
+builder.Services.AddSwaggerGen(c =>
+{
+    // Configuration de la version de Swagger, avec un titre et une version pour l'API
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "LibraryApi", Version = "v1" });
+
+    // Configuration de Swagger pour inclure l'authentification JWT
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        // Description de la manière d'utiliser le token JWT (ici, en tant que valeur de l'en-tête Authorization)
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Name = "Authorization",  // Nom du champ dans l'en-tête HTTP qui contiendra le token JWT
+        In = ParameterLocation.Header,  // Le token JWT sera fourni dans l'en-tête de la requête HTTP
+        Type = SecuritySchemeType.ApiKey,  // Définit que c'est un schéma de sécurité basé sur un token (API key)
+        Scheme = "Bearer"  // Spécifie que nous utilisons le schéma "Bearer" pour la transmission du token
+    });
+
+    // Définition de la sécurité requise pour les points de terminaison dans l'API (requiert un token JWT pour certains endpoints)
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement()
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"  // Se réfère au schéma de sécurité défini précédemment
+                },
+                Scheme = "oauth2",  // Précise que le schéma est basé sur OAuth2 pour l'authentification
+                Name = "Bearer",
+                In = ParameterLocation.Header,  // Précise que le token sera transmis dans l'en-tête
+            },
+            new List<string>()  // Aucune autorisation spécifique requise (vide)
+        }
+    });
+});
+
+// Construction de l'application avec tous les services configurés précédemment
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseStaticFiles();  // Permet de servir les fichiers statiques depuis wwwroot
+
+// Configuration pour n'activer Swagger que dans l'environnement de développement (en évitant d'exposer la documentation en production)
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwagger();  // Active Swagger pour générer la documentation API
+    app.UseSwaggerUI(c =>
+    {
+        // Définition de l'URL où accéder à la documentation de l'API (fichier JSON Swagger)
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "LibraryApi v1");
+    });
 }
 
-app.UseHttpsRedirection();
+// Active l'authentification dans le pipeline des requêtes HTTP
+app.UseAuthentication();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+// Active l'autorisation (vérification des droits d'accès aux ressources) dans le pipeline des requêtes HTTP
+app.UseAuthorization();
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+// Mappage des contrôleurs API pour gérer les requêtes HTTP et les rediriger vers les contrôleurs appropriés
+app.MapControllers();
 
+// Lancement de l'application (écoute des requêtes entrantes)
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
