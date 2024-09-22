@@ -1,55 +1,7 @@
 // Déclaration d'une variable qui stocke l'adresse de l'API
-// Ici, la variable @src_HostAddress est définie avec la valeur "http://localhost:5014".
+// Ici, la variable @src_HostAddress est définie avec la valeur "http://localhost:5000".
 // Cela signifie que l'API est hébergée localement sur le port 5014.
 // Cette variable peut être réutilisée dans les requêtes suivantes pour éviter la répétition de l'URL.
 
-@src_HostAddress = http://localhost:5014
+@src_HostAddress = http://localhost:5000
 
-// Envoie d'une requête GET vers l'API.
-// {{src_HostAddress}} est une variable qui est remplacée par sa valeur (http://localhost:5014).
-// L'URL complète de la requête devient : http://localhost:5014/weatherforecast/
-// La route "/weatherforecast" est l'endpoint spécifique de l'API que nous interrogeons pour obtenir des prévisions météo.
-
-GET {{src_HostAddress}}/weatherforecast/
-// En-tête HTTP pour indiquer que la réponse attendue est au format JSON.
-// "Accept: application/json" précise au serveur que le client souhaite recevoir une réponse au format JSON.
-Accept: application/json
-
-###
-POST {{src_HostAddress}}/api/books
-Content-Type: application/json
-
-{
-  "title": "C# Programming",
-  "author": "John Doe",
-  "year": 2024
-}
-
-###
-PUT {{src_HostAddress}}/api/books/1
-Content-Type: application/json
-
-{
-  "title": "Advanced C#",
-  "author": "John Doe",
-  "year": 2025
-}
-
-###
-DELETE {{src_HostAddress}}/api/books/1
-
-###
-POST {{src_HostAddress}}/api/auth/login
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-
-###
-GET {{src_HostAddress}}/api/secure-endpoint
-Accept: application/json
-Authorization: Bearer <your-token-here>
-
-###
