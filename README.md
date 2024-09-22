@@ -24,7 +24,7 @@ Ce projet est une API REST développée en .NET 8.0 qui permet aux utilisateurs 
 
 1. Clonez le dépôt GitHub :
    ```bash
-   git clone https://github.com/VOTRE_COMPTE_GITHUB/API-REST-DotNet-Library.git
+   git clone https://github.com/nide65/API-REST-DotNet-Library.git
    cd API-REST-DotNet-Library
    ```
 
@@ -32,7 +32,7 @@ Ce projet est une API REST développée en .NET 8.0 qui permet aux utilisateurs 
    ```json
    {
      "ConnectionStrings": {
-       "DefaultConnection": "Server=localhost;Database=LibraryDB;User=root;Password=VotreMotDePasse;"
+       "DefaultConnection": "Server=localhost;Database=LibraryDB;User=VotreNomUtilisateur;Password=VotreMotDePasse;"
      }
    }
    ```
