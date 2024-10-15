@@ -24,4 +24,22 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Author> Authors { get; set; }  // Ajout de la table Author
     public DbSet<Category> Categories { get; set; }  // Ajout de la table Category
 
+
+    // Nouvelles tables ajoutées pour l'étape 3 (Bibliothèque Personnelle)
+    public DbSet<UserFavorite> UserFavorites { get; set; }  // Ajout de la table pour les favoris de l'utilisateur
+    public DbSet<UserReadingHistory> UserReadingHistory { get; set; }  // Ajout de la table pour l'historique de lecture
+
+    // Surcharge de la méthode OnModelCreating pour configurer les clés primaires composites
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);  // Appel de la méthode de la classe de base
+
+        // Configuration de la clé primaire composite pour UserFavorite
+        modelBuilder.Entity<UserFavorite>()
+            .HasKey(uf => new { uf.UserId, uf.BookMagazineId });
+
+        // Configuration de la clé primaire composite pour UserReadingHistory
+        modelBuilder.Entity<UserReadingHistory>()
+            .HasKey(urh => new { urh.UserId, urh.BookMagazineId });
+    }
 }
