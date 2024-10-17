@@ -463,6 +463,5 @@ Ces fonctionnalités sont idéales pour améliorer l'expérience utilisateur d'u
 
 Swagger est un excellent outil pour tester et documenter vos API REST. Il permet d'interagir avec vos endpoints directement via l'interface web, facilitant ainsi le développement et le débogage. Avec le support du token JWT, vous pouvez également tester les fonctionnalités protégées par l'authentification dans un environnement sécurisé.
 
-N'oubliez pas d'exécuter chaque fonctionnalité que vous avez développée, de vérifier les réponses JSON et de vous assurer que tout fonctionne comme prévu.
 
 
