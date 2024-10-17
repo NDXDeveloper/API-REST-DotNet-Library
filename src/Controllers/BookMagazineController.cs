@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Security.Claims; // Utilisé pour manipuler les informations des utilisateurs (claims) dans les tokens d'authentification, comme l'identifiant de l'utilisateur (UserId).
+
 
 [Route("api/[controller]")]
 [ApiController]
@@ -88,45 +91,107 @@ public class BookMagazineController : ControllerBase
                 Author = b.Author.Name,
                 Category = b.Category.Name,
                 b.CoverImagePath,
-                b.UploadDate
+                b.UploadDate,
+                b.ViewCount 
             })
             .ToList();
 
         return Ok(booksMagazines);
     }
 
-    // *** Obtenir les détails d'un livre ou magazine spécifique ***
+    //*** Obtenir les détails d'un livre ou magazine spécifique ***
+    // [HttpGet("{id}")]
+    // public IActionResult GetBookMagazine(int id)
+    // {
+    //     var bookMagazine = _context.BooksMagazines
+    //         .Where(b => b.Id == id)
+    //         .Select(b => new 
+    //         {
+    //             b.Id,
+    //             b.Title,
+    //             b.Description,
+    //             Author = b.Author.Name,
+    //             Category = b.Category.Name,
+    //             b.Tags,
+    //             b.CoverImagePath,
+    //             b.FilePath,
+    //             b.UploadDate
+    //         })
+    //         .FirstOrDefault();
+
+    //     if (bookMagazine == null)
+    //         return NotFound();
+
+    //     return Ok(bookMagazine);        
+    // }
+
     [HttpGet("{id}")]
-    public IActionResult GetBookMagazine(int id)
+    public async Task<IActionResult> GetBookMagazine(int id)
     {
-        var bookMagazine = _context.BooksMagazines
-            .Where(b => b.Id == id)
-            .Select(b => new 
-            {
-                b.Id,
-                b.Title,
-                b.Description,
-                Author = b.Author.Name,
-                Category = b.Category.Name,
-                b.Tags,
-                b.CoverImagePath,
-                b.FilePath,
-                b.UploadDate
-            })
-            .FirstOrDefault();
+        var bookMagazine = await _context.BooksMagazines
+                .Include(b => b.Author)       // Inclure l'entité 'Author'
+                .Include(b => b.Category)     // Inclure l'entité 'Category'
+            .FirstOrDefaultAsync(b => b.Id == id);
 
         if (bookMagazine == null)
             return NotFound();
 
-        return Ok(bookMagazine);
+        // Vérifier que l'entité 'Author' et 'Category' ne sont pas nulles
+        if (bookMagazine.Author == null || bookMagazine.Category == null)
+            return StatusCode(500, "Invalid data: Author or Category not found.");  // Gérer les cas de données incorrectes
+
+
+        // Incrémenter le compteur de vues
+        bookMagazine.ViewCount++;
+        _context.BooksMagazines.Update(bookMagazine);
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            bookMagazine.Id,
+            bookMagazine.Title,
+            bookMagazine.Description,
+            Author = bookMagazine.Author.Name,
+            Category = bookMagazine.Category.Name,
+            bookMagazine.Tags,
+            bookMagazine.CoverImagePath,
+            bookMagazine.FilePath,
+            bookMagazine.UploadDate,
+            bookMagazine.ViewCount // Renvoyer le nombre de vues
+        });
     }
 
-    // *** Télécharger le fichier d'un livre ou magazine ***
+
+    // // *** Télécharger le fichier d'un livre ou magazine ***
+    // [HttpGet("download/{id}")]
+    // public IActionResult DownloadBookMagazine(int id)
+    // {
+    //     var bookMagazine = _context.BooksMagazines.FirstOrDefault(b => b.Id == id);
+    //     if (bookMagazine == null) return NotFound();
+
+    //     var filePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", bookMagazine.FilePath.TrimStart('/'));
+    //     if (!System.IO.File.Exists(filePath))
+    //         return NotFound("File not found on server.");
+
+    //     var fileBytes = System.IO.File.ReadAllBytes(filePath);
+    //     var fileName = Path.GetFileName(filePath);
+
+    //     return File(fileBytes, "application/octet-stream", fileName);
+    // }
+
     [HttpGet("download/{id}")]
-    public IActionResult DownloadBookMagazine(int id)
+    public async Task<IActionResult> DownloadBookMagazine(int id)
     {
-        var bookMagazine = _context.BooksMagazines.FirstOrDefault(b => b.Id == id);
-        if (bookMagazine == null) return NotFound();
+        //var bookMagazine =  _context.BooksMagazines.FirstOrDefault(b => b.Id == id);
+        var bookMagazine = await _context.BooksMagazines
+        .FirstOrDefaultAsync(b => b.Id == id);
+
+        if (bookMagazine == null) 
+            return NotFound();
+
+        // Incrémenter le compteur de téléchargements
+        bookMagazine.DownloadCount++;
+        _context.BooksMagazines.Update(bookMagazine);
+        await _context.SaveChangesAsync();
 
         var filePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", bookMagazine.FilePath.TrimStart('/'));
         if (!System.IO.File.Exists(filePath))
@@ -137,6 +202,7 @@ public class BookMagazineController : ControllerBase
 
         return File(fileBytes, "application/octet-stream", fileName);
     }
+
 
     // *** Mettre à jour un livre ou magazine par l'administrateur ***
     [HttpPut("update/{id}")]
@@ -231,4 +297,138 @@ public class BookMagazineController : ControllerBase
 
         return Ok(new { Message = "Book or magazine deleted successfully!" });
     }
+
+    // etape 4
+    [HttpGet("search")]
+    public IActionResult SearchBooksMagazines([FromQuery] string keyword)
+    {
+        var booksMagazines = _context.BooksMagazines
+            .Where(b => b.Title.Contains(keyword) || 
+                        b.Description.Contains(keyword) || 
+                        b.Author.Name.Contains(keyword) || 
+                        b.Tags.Contains(keyword))
+            .Select(b => new {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                b.CoverImagePath,
+                b.UploadDate,
+                b.ViewCount
+            })
+            .ToList();
+        
+        return Ok(booksMagazines);
+    }
+
+    [HttpGet("advanced-search")]
+    public IActionResult SearchBooksMagazines([FromQuery] string keyword, [FromQuery] string category, [FromQuery] string author, [FromQuery] DateTime? publishDate, [FromQuery] bool sortByPopularity = false)
+    {
+        var query = _context.BooksMagazines.AsQueryable();
+
+        if (!string.IsNullOrEmpty(keyword))
+        {
+            query = query.Where(b => b.Title.Contains(keyword) || 
+                                    b.Description.Contains(keyword) || 
+                                    b.Tags.Contains(keyword));
+        }
+
+        if (!string.IsNullOrEmpty(category))
+        {
+            query = query.Where(b => b.Category.Name == category);
+        }
+
+        if (!string.IsNullOrEmpty(author))
+        {
+            query = query.Where(b => b.Author.Name == author);
+        }
+
+        if (publishDate.HasValue)
+        {
+            query = query.Where(b => b.UploadDate >= publishDate.Value);
+        }
+
+         // Trier par popularité (ViewCount) si demandé
+        if (sortByPopularity)
+        {
+            query = query.OrderByDescending(b => b.ViewCount);
+        }
+
+        var results = query.Select(b => new {
+            b.Id,
+            b.Title,
+            Author = b.Author.Name,
+            b.CoverImagePath,
+            b.UploadDate,
+            b.ViewCount
+        }).ToList();
+
+        return Ok(results);
+    }
+
+  
+    [HttpGet("search/popular")]
+    public IActionResult SearchBooksMagazinesByPopularity()
+    {
+        var booksMagazines = _context.BooksMagazines
+            .OrderByDescending(b => b.ViewCount)  // Trier par le compteur de vues
+            .Select(b => new {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                b.CoverImagePath,
+                b.UploadDate,
+                b.ViewCount  // Inclure le nombre de vues dans la réponse
+            })
+            .ToList();
+
+        return Ok(booksMagazines);
+    }
+
+    [HttpGet("search/popular-downloads")]
+    public IActionResult SearchBooksMagazinesByDownloads()
+    {
+        var booksMagazines = _context.BooksMagazines
+            .OrderByDescending(b => b.DownloadCount)  // Trier par le compteur de téléchargements
+            .Select(b => new {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                b.CoverImagePath,
+                b.UploadDate,
+                b.DownloadCount  // Inclure le nombre de téléchargements dans la réponse
+            })
+            .ToList();
+
+        return Ok(booksMagazines);
+    }
+
+    [HttpGet("suggestions")]
+    [Authorize]
+    public IActionResult GetSuggestions()
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        // Obtenez les catégories des livres déjà lus par l'utilisateur
+        var categories = _context.UserReadingHistory
+            .Where(ur => ur.UserId == userId)
+            .Select(ur => ur.BookMagazine.CategoryId)
+            .Distinct()
+            .ToList();
+
+        // Obtenez les suggestions basées sur ces catégories
+        var suggestions = _context.BooksMagazines
+            .Where(b => categories.Contains(b.CategoryId))
+            .Select(b => new {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                b.CoverImagePath,
+                b.UploadDate
+            })
+            .ToList();
+
+        return Ok(suggestions);
+    }
+
+
 }

@@ -41,5 +41,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         // Configuration de la clé primaire composite pour UserReadingHistory
         modelBuilder.Entity<UserReadingHistory>()
             .HasKey(urh => new { urh.UserId, urh.BookMagazineId });
+
+
+        // Ajout d'index sur les colonnes utilisées fréquemment dans les recherches
+        // modelBuilder.Entity<BookMagazine>()
+        //     .HasIndex(b => b.Title)
+        //     .HasDatabaseName("IX_BooksMagazines_Title");
+
+        // modelBuilder.Entity<BookMagazine>()
+        //     .HasIndex(b => b.Description)
+        //     .HasDatabaseName("IX_BooksMagazines_Description");
+
+        // modelBuilder.Entity<BookMagazine>()
+        //     .HasIndex(b => b.Tags)
+        //     .HasDatabaseName("IX_BooksMagazines_Tags");
+
+        // // Index sur la relation avec l'Author
+        // modelBuilder.Entity<BookMagazine>()
+        //     .HasIndex(b => b.AuthorId)
+        //     .HasDatabaseName("IX_BooksMagazines_AuthorId");    
     }
 }

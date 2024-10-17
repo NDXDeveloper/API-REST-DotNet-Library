@@ -29,4 +29,10 @@ public class BookMagazine
     public string CoverImagePath { get; set; }
 
     public DateTime UploadDate { get; set; } = DateTime.Now;
+
+    // Nouveau champ pour suivre le nombre de vues
+    public int ViewCount { get; set; } = 0;  // Initialisé à 0
+
+    // Ou si vous préférez un compteur de téléchargements
+    public int DownloadCount { get; set; } = 0;  // Initialisé à 0
 }
