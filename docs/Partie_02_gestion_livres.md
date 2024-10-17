@@ -129,7 +129,37 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
 ```
 
-### 4. **Création d'un contrôleur pour gérer les livres et magazines :**
+### 4. **Modèle pour l'upload du livre/magazine :**
+Ajoutons un modèle pour gérer les uploads de fichiers dans le contrôleur.
+
+#### `BookMagazineModel.cs` :
+```csharp
+using Microsoft.AspNetCore.Http;
+using System.ComponentModel.DataAnnotations;
+
+public class BookMagazineModel
+{
+    [Required]
+    public string Title { get; set; }
+
+    [Required]
+    public string Author { get; set; }  // L'auteur est désormais un champ texte
+
+    public string Description { get; set; }
+
+    [Required]
+    public string Category { get; set; }  // La catégorie est désormais un champ texte
+
+    public string Tags { get; set; }
+
+    [Required]
+    public IFormFile File { get; set; }
+
+    public IFormFile CoverImage { get; set; }  // Optionnel, image de couverture
+}
+```
+
+### 5. **Création d'un contrôleur pour gérer les livres et magazines :**
 
 Créons un contrôleur API pour ajouter, consulter, et télécharger des livres ou magazines.
 
@@ -371,35 +401,6 @@ public class BookMagazineController : ControllerBase
 }
 ```
 
-### 5. **Modèle pour l'upload du livre/magazine :**
-Ajoutons un modèle pour gérer les uploads de fichiers dans le contrôleur.
-
-#### `BookMagazineModel.cs` :
-```csharp
-using Microsoft.AspNetCore.Http;
-using System.ComponentModel.DataAnnotations;
-
-public class BookMagazineModel
-{
-    [Required]
-    public string Title { get; set; }
-
-    [Required]
-    public string Author { get; set; }  // L'auteur est désormais un champ texte
-
-    public string Description { get; set; }
-
-    [Required]
-    public string Category { get; set; }  // La catégorie est désormais un champ texte
-
-    public string Tags { get; set; }
-
-    [Required]
-    public IFormFile File { get; set; }
-
-    public IFormFile CoverImage { get; set; }  // Optionnel, image de couverture
-}
-```
 
 ### 6. **Ajout de migration et mise à jour de la base de données :**
 Il est maintenant nécessaire de créer une migration et d'appliquer cette dernière à la base de données.
