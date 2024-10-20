@@ -42,22 +42,72 @@ public class BookMagazineController : ControllerBase
         }
 
         // Enregistrement du fichier du livre/magazine
-        var filePath = Path.Combine("wwwroot/files", model.File.FileName);
+        // var filePath = Path.Combine("wwwroot/files", model.File.FileName);
+        // Générer un nom de fichier unique (UUID)
+        //var uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";  // Conserver l'extension originale
+        // Générer un nom de fichier unique (UUID)
+        string uniqueFileName;
+        do
+        {
+            uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";
+        }
+        while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));  // Vérification de l'unicité
+
+        // Sauvegarder l'UUID dans la table FileUuids
+        var fileUuid = new FileUuid { Uuid = uniqueFileName };
+        _context.FileUuids.Add(fileUuid);
+        await _context.SaveChangesAsync();
+        
+        var filePath = Path.Combine("wwwroot/files", uniqueFileName); // Enregistrement du fichier du livre/magazine
         using (var stream = new FileStream(filePath, FileMode.Create))
         {
             await model.File.CopyToAsync(stream);
         }
 
         // Enregistrement de l'image de couverture si elle est présente
+        // string coverImagePath = null;
+        // if (model.CoverImage != null && model.CoverImage.Length > 0)
+        // {
+        //     coverImagePath = Path.Combine("wwwroot/images/covers", model.CoverImage.FileName);
+        //     using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
+        //     {
+        //         await model.CoverImage.CopyToAsync(coverStream);
+        //     }
+        //     coverImagePath = $"/images/covers/{model.CoverImage.FileName}";
+        // }
+
+        // Enregistrement de l'image de couverture si elle est présente
         string coverImagePath = null;
+        string originalCoverImageName = null;
+        
         if (model.CoverImage != null && model.CoverImage.Length > 0)
         {
-            coverImagePath = Path.Combine("wwwroot/images/covers", model.CoverImage.FileName);
+            originalCoverImageName = model.CoverImage.FileName; // Stocker le nom original de l'image de couverture
+
+            // Générer un UUID unique pour l'image de couverture
+            string uuid;
+            do
+            {
+                uuid = Guid.NewGuid().ToString();
+            }
+            while (_context.CoverImageUuids.Any(u => u.Uuid == uuid));  // Vérifier si ce UUID existe déjà
+
+            // Enregistrer l'UUID dans la table pour garantir l'unicité
+            _context.CoverImageUuids.Add(new CoverImageUuid { Uuid = uuid });
+            await _context.SaveChangesAsync();
+
+            var coverImageExtension = Path.GetExtension(model.CoverImage.FileName);
+            var coverImageFileName = uuid + coverImageExtension;
+            coverImagePath = Path.Combine("wwwroot/images/covers", coverImageFileName);
+
+            // Sauvegarder l'image de couverture avec le nom UUID
             using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
             {
                 await model.CoverImage.CopyToAsync(coverStream);
             }
-            coverImagePath = $"/images/covers/{model.CoverImage.FileName}";
+
+            // Stocker le chemin relatif dans la base de données
+            coverImagePath = $"/images/covers/{coverImageFileName}";
         }
 
         // Création de l'objet BookMagazine
@@ -68,8 +118,12 @@ public class BookMagazineController : ControllerBase
             CategoryId = category.Id,  // Association avec la catégorie
             Description = model.Description,
             Tags = model.Tags,
-            FilePath = $"/files/{model.File.FileName}",
-            CoverImagePath = coverImagePath
+            // FilePath = $"/files/{model.File.FileName}",
+            FilePath = $"/files/{uniqueFileName}",  // Chemin du fichier avec UUID
+            CoverImagePath = coverImagePath,
+            OriginalFileName = model.File.FileName,  // Stocker le nom de fichier original
+            OriginalCoverImageName = originalCoverImageName  // Nom original de l'image
+    
         };
 
         // Enregistrement dans la base de données
@@ -198,9 +252,10 @@ public class BookMagazineController : ControllerBase
             return NotFound("File not found on server.");
 
         var fileBytes = System.IO.File.ReadAllBytes(filePath);
-        var fileName = Path.GetFileName(filePath);
+        //var fileName = Path.GetFileName(filePath);
+        var originalFileName = bookMagazine.OriginalFileName;
 
-        return File(fileBytes, "application/octet-stream", fileName);
+        return File(fileBytes, "application/octet-stream", originalFileName);
     }
 
 
@@ -237,15 +292,54 @@ public class BookMagazineController : ControllerBase
         bookMagazine.CategoryId = category.Id;
 
         // Gestion du fichier (facultatif)
+        // if (model.File != null)
+        // {
+        //     var filePath = Path.Combine("wwwroot/files", model.File.FileName);
+        //     using (var stream = new FileStream(filePath, FileMode.Create))
+        //     {
+        //         await model.File.CopyToAsync(stream);
+        //     }
+        //     bookMagazine.FilePath = $"/files/{model.File.FileName}";
+        // }
+
         if (model.File != null)
         {
-            var filePath = Path.Combine("wwwroot/files", model.File.FileName);
+            // Supprimer l'ancien fichier du serveur
+            if (!string.IsNullOrEmpty(bookMagazine.FilePath))
+            {
+                var oldFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", bookMagazine.FilePath.TrimStart('/'));
+                if (System.IO.File.Exists(oldFilePath))
+                {
+                    System.IO.File.Delete(oldFilePath);
+                }
+            }
+
+            // Générer un nouveau nom de fichier UUID
+            string uniqueFileName;
+            do
+            {
+                uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";
+            }
+            while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));
+
+            // Sauvegarder le nouvel UUID dans la table FileUuids
+            var fileUuid = new FileUuid { Uuid = uniqueFileName };
+            _context.FileUuids.Add(fileUuid);
+            await _context.SaveChangesAsync();
+
+            // Enregistrer le fichier sur le serveur avec l'UUID
+            var filePath = Path.Combine("wwwroot/files", uniqueFileName);
             using (var stream = new FileStream(filePath, FileMode.Create))
             {
                 await model.File.CopyToAsync(stream);
             }
-            bookMagazine.FilePath = $"/files/{model.File.FileName}";
+
+            // Mise à jour du chemin du fichier et du nom de fichier original
+            bookMagazine.FilePath = $"/files/{uniqueFileName}";
+            bookMagazine.OriginalFileName = model.File.FileName;
         }
+
+
 
         // Gestion de l'image de couverture (facultatif)
         if (model.CoverImage != null)
@@ -279,6 +373,13 @@ public class BookMagazineController : ControllerBase
             if (System.IO.File.Exists(filePath))
             {
                 System.IO.File.Delete(filePath);
+            }
+
+            // Supprimer l'UUID de la table FileUuids
+            var fileUuid = _context.FileUuids.FirstOrDefault(f => f.Uuid == bookMagazine.FilePath.Replace("/files/", ""));
+            if (fileUuid != null)
+            {
+                _context.FileUuids.Remove(fileUuid);
             }
         }
 
@@ -429,6 +530,39 @@ public class BookMagazineController : ControllerBase
 
         return Ok(suggestions);
     }
+
+
+    [HttpGet("download-cover/{id}")]
+    public async Task<IActionResult> DownloadCoverImage(int id)
+    {
+        // Récupérer le livre ou magazine avec l'ID donné
+        var bookMagazine = await _context.BooksMagazines
+            .FirstOrDefaultAsync(b => b.Id == id);
+
+        if (bookMagazine == null)
+            return NotFound("Book or magazine not found.");
+
+        // Vérifier si le chemin de l'image de couverture existe
+        if (string.IsNullOrEmpty(bookMagazine.CoverImagePath))
+            return NotFound("Cover image not found.");
+
+        // Construire le chemin complet du fichier
+        var coverImagePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", bookMagazine.CoverImagePath.TrimStart('/'));
+
+        // Vérifier si le fichier existe sur le serveur
+        if (!System.IO.File.Exists(coverImagePath))
+            return NotFound("Cover image file not found on server.");
+
+        // Récupérer les octets du fichier
+        var fileBytes = System.IO.File.ReadAllBytes(coverImagePath);
+
+        // Utiliser le nom original de l'image pour le téléchargement
+        var originalFileName = bookMagazine.OriginalCoverImageName ?? "cover.jpg";  // Utiliser le nom original ou un nom par défaut
+
+        // Retourner le fichier avec le nom original
+        return File(fileBytes, "image/jpeg", originalFileName);
+    }
+
 
 
 }

@@ -35,4 +35,10 @@ public class BookMagazine
 
     // Ou si vous préférez un compteur de téléchargements
     public int DownloadCount { get; set; } = 0;  // Initialisé à 0
+
+    // Ajout d'une nouvelle propriété pour stocker le nom original du fichier
+    public string OriginalFileName { get; set; }
+
+    public string OriginalCoverImageName { get; set; } // Stocker le nom original de l'image de couverture
+
 }

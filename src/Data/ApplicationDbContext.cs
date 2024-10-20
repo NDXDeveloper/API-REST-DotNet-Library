@@ -29,6 +29,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<UserFavorite> UserFavorites { get; set; }  // Ajout de la table pour les favoris de l'utilisateur
     public DbSet<UserReadingHistory> UserReadingHistory { get; set; }  // Ajout de la table pour l'historique de lecture
 
+    // Nouvelle table pour stocker les UUIDs générés
+    public DbSet<FileUuid> FileUuids { get; set; }
+
+    public DbSet<CoverImageUuid> CoverImageUuids { get; set; }  // Nouvelle table pour les UUID des images
+
+
     // Surcharge de la méthode OnModelCreating pour configurer les clés primaires composites
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,5 +66,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         // modelBuilder.Entity<BookMagazine>()
         //     .HasIndex(b => b.AuthorId)
         //     .HasDatabaseName("IX_BooksMagazines_AuthorId");    
+
+
+        // Configuration pour ajouter un index unique sur la colonne 'Uuid' de la table 'CoverImageUuids'
+        // modelBuilder.Entity<CoverImageUuid>()
+        //     .HasIndex(c => c.Uuid)
+        //     .IsUnique();  // Assurer l'unicité
+
+        // Configuration d'un index unique sur la colonne Uuid dans la table FileUuid
+        // modelBuilder.Entity<FileUuid>()
+        // .HasIndex(f => f.Uuid)
+        // .IsUnique();
+    
     }
 }
