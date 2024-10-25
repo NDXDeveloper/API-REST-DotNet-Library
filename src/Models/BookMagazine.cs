@@ -41,4 +41,7 @@ public class BookMagazine
 
     public string OriginalCoverImageName { get; set; } // Stocker le nom original de l'image de couverture
 
+    public double AverageRating { get; set; }  // Nouveau champ pour stocker la note moyenne
+
+
 }

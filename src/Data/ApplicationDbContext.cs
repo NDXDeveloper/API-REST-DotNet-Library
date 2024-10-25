@@ -34,6 +34,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<CoverImageUuid> CoverImageUuids { get; set; }  // Nouvelle table pour les UUID des images
 
+    // Ajout des tables pour les notes et commentaires
+    public DbSet<Rating> Ratings { get; set; }
+    public DbSet<Comment> Comments { get; set; }
 
     // Surcharge de la méthode OnModelCreating pour configurer les clés primaires composites
     protected override void OnModelCreating(ModelBuilder modelBuilder)

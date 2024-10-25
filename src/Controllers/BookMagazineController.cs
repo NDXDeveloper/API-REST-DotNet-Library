@@ -563,6 +563,149 @@ public class BookMagazineController : ControllerBase
         return File(fileBytes, "image/jpeg", originalFileName);
     }
 
+    [HttpPost("{bookMagazineId}/rate")]
+    [Authorize]
+    public async Task<IActionResult> RateBookMagazine(int bookMagazineId, [FromBody] int ratingValue)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
+        // Vérifier que l'utilisateur a bien lu le livre
+        var hasRead = _context.UserReadingHistory
+            .Any(ur => ur.BookMagazineId == bookMagazineId && ur.UserId == userId);
+
+        if (!hasRead)
+        {
+            return BadRequest("You can only rate books or magazines you've read.");
+        }
+
+        if (ratingValue < 1 || ratingValue > 5)
+            return BadRequest("Rating must be between 1 and 5.");
+
+        var existingRating = _context.Ratings.FirstOrDefault(r => r.BookMagazineId == bookMagazineId && r.UserId == userId);
+        
+        if (existingRating != null)
+        {
+            existingRating.RatingValue = ratingValue;
+        }
+        else
+        {
+            var rating = new Rating
+            {
+                BookMagazineId = bookMagazineId,
+                UserId = userId,
+                RatingValue = ratingValue
+            };
+            _context.Ratings.Add(rating);
+        }
+
+        await _context.SaveChangesAsync();
+
+        var averageRating = _context.Ratings
+            .Where(r => r.BookMagazineId == bookMagazineId)
+            .Average(r => r.RatingValue);
+
+        var bookMagazine = _context.BooksMagazines.FirstOrDefault(b => b.Id == bookMagazineId);
+        bookMagazine.AverageRating = averageRating;
+        _context.BooksMagazines.Update(bookMagazine);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Rating submitted successfully", AverageRating = averageRating });
+    }
+
+    [HttpGet("{id}/ratings")]
+    public IActionResult GetRatings(int id)
+    {
+        var ratings = _context.Ratings
+            .Where(r => r.BookMagazineId == id)
+            .Select(r => new {
+                r.UserId,
+                r.RatingValue,
+                r.RatingDate
+            })
+            .ToList();
+
+        var averageRating = ratings.Any() ? ratings.Average(r => r.RatingValue) : 0;
+
+        return Ok(new { Ratings = ratings, AverageRating = averageRating });
+    }
+
+    [HttpPost("{bookMagazineId}/comment")]
+    [Authorize]
+    public async Task<IActionResult> AddComment(int bookMagazineId, [FromBody] string content)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        // Vérifier que l'utilisateur a bien lu le livre avant de pouvoir commenter
+        var hasRead = _context.UserReadingHistory
+            .Any(ur => ur.BookMagazineId == bookMagazineId && ur.UserId == userId);
+
+        if (!hasRead)
+        {
+            return BadRequest("You can only comment on books or magazines you've read.");
+        }
+
+        var comment = new Comment
+        {
+            BookMagazineId = bookMagazineId,
+            UserId = userId,
+            Content = content
+        };
+
+        _context.Comments.Add(comment);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Comment added successfully" });
+    }
+
+    [HttpPost("{bookMagazineId}/comment/{commentId}/reply")]
+    [Authorize]
+    public async Task<IActionResult> ReplyToComment(int bookMagazineId, int commentId, [FromBody] string content)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        // Vérifier que l'utilisateur a bien lu le livre avant de pouvoir répondre à un commentaire
+        var hasRead = _context.UserReadingHistory
+            .Any(ur => ur.BookMagazineId == bookMagazineId && ur.UserId == userId);
+
+        if (!hasRead)
+        {
+            return BadRequest("You can only reply to comments on books or magazines you've read.");
+        }
+
+        var reply = new Comment
+        {
+            BookMagazineId = bookMagazineId,
+            UserId = userId,
+            Content = content,
+            ParentCommentId = commentId
+        };
+
+        _context.Comments.Add(reply);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Reply added successfully" });
+    }
+
+    [HttpGet("{bookMagazineId}/comments")]
+    public IActionResult GetComments(int bookMagazineId)
+    {
+        var comments = _context.Comments
+            .Where(c => c.BookMagazineId == bookMagazineId)
+            .Select(c => new {
+                c.Id,
+                c.Content,
+                c.CommentDate,
+                c.UserId,
+                Replies = _context.Comments.Where(r => r.ParentCommentId == c.Id).Select(r => new {
+                    r.Id,
+                    r.Content,
+                    r.CommentDate,
+                    r.UserId
+                }).ToList()
+            })
+            .ToList();
+
+        return Ok(comments);
+    }
 
 }
