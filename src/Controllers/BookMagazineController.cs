@@ -23,6 +23,9 @@ public class BookMagazineController : ControllerBase
     [Authorize]
     public async Task<IActionResult> AddBookMagazine([FromForm] BookMagazineModel model)
     {
+        // Récupération de l'ID de l'utilisateur
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
         // Vérifier si l'auteur existe, sinon le créer
         var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
         if (author == null)
@@ -129,6 +132,36 @@ public class BookMagazineController : ControllerBase
         // Enregistrement dans la base de données
         _context.BooksMagazines.Add(bookMagazine);
         await _context.SaveChangesAsync();
+
+        // Créer une notification pour les administrateurs
+        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+        var adminUsers = await _context.UserRoles
+            .Where(ur => ur.RoleId == adminRole.Id)
+            .Select(ur => ur.UserId)
+            .ToListAsync();
+
+        var notification = new Notification
+        {
+            Content = $"Un nouveau magazine a été ajouté par l'utilisateur {userId}",
+            CreatedAt = DateTime.Now,
+            IsRead = false
+        };
+
+        _context.Notifications.Add(notification);
+        await _context.SaveChangesAsync();
+
+        // Lier cette notification aux administrateurs uniquement
+        foreach (var adminId in adminUsers)
+        {
+            _context.UserNotifications.Add(new UserNotification
+            {
+                UserId = adminId,
+                NotificationId = notification.Id,
+                IsSent = false
+            });
+        }
+        await _context.SaveChangesAsync();
+
 
         return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
     }
@@ -665,6 +698,37 @@ public class BookMagazineController : ControllerBase
 
         _context.Comments.Add(comment);
         await _context.SaveChangesAsync();
+
+        // Récupérer l'auteur du magazine
+        var bookMagazine = await _context.BooksMagazines
+            .Include(b => b.Author)  // Inclure l'auteur pour récupérer son ID
+            .FirstOrDefaultAsync(b => b.Id == bookMagazineId);
+
+        if (bookMagazine != null && bookMagazine.AuthorId.ToString() != userId)
+        {
+            // Créer une notification pour l'auteur uniquement si le commentateur n'est pas lui-même l'auteur
+            var notification = new Notification
+            {
+                Content = $"Un nouveau commentaire a été ajouté à votre magazine : {bookMagazine.Title}",
+                CreatedAt = DateTime.Now,
+                IsRead = false
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Lier cette notification à l'auteur du magazine
+            var userNotification = new UserNotification
+            {
+                UserId = bookMagazine.AuthorId.ToString(),
+                NotificationId = notification.Id,
+                IsSent = false
+            };
+
+            _context.UserNotifications.Add(userNotification);
+            await _context.SaveChangesAsync();
+        }
+
 
         return Ok(new { Message = "Comment added successfully" });
     }

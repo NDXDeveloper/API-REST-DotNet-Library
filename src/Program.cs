@@ -105,6 +105,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Ajout de EmailService pour l'injection de dépendance
+builder.Services.AddScoped<EmailService>();
+
 // Construction de l'application avec tous les services configurés précédemment
 var app = builder.Build();
 

@@ -38,6 +38,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Rating> Ratings { get; set; }
     public DbSet<Comment> Comments { get; set; }
 
+    // Notifications 
+    public DbSet<Notification> Notifications { get; set; }
+    public DbSet<UserNotification> UserNotifications { get; set; }
+
     // Surcharge de la méthode OnModelCreating pour configurer les clés primaires composites
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
