@@ -169,26 +169,47 @@ Pour afficher les statistiques d’un livre ou magazine dans les réponses de co
 public async Task<IActionResult> GetBookMagazine(int id)
 {
     var bookMagazine = await _context.BooksMagazines
-        .Where(b => b.Id == id)
-        .Select(b => new {
-            b.Id,
-            b.Title,
-            b.Description,
-            Author = b.Author.Name,
-            b.ViewCount,
-            b.DownloadCount,
-            AverageRating = _context.Ratings
-                .Where(r => r.BookMagazineId == id)
-                .Average(r => (double?)r.RatingValue) ?? 0,
-            CommentCount = _context.Comments.Count(c => c.BookMagazineId == id)
-        })
-        .FirstOrDefaultAsync();
+        .Include(b => b.Author)       // Inclure l'entité 'Author'
+        .Include(b => b.Category)     // Inclure l'entité 'Category'
+        .FirstOrDefaultAsync(b => b.Id == id);
 
     if (bookMagazine == null)
         return NotFound();
 
-    return Ok(bookMagazine);
+    // Vérifier que l'entité 'Author' et 'Category' ne sont pas nulles
+    if (bookMagazine.Author == null || bookMagazine.Category == null)
+        return StatusCode(500, "Invalid data: Author or Category not found.");  // Gérer les cas de données incorrectes
+
+    // Incrémenter le compteur de vues
+    bookMagazine.ViewCount++;
+    _context.BooksMagazines.Update(bookMagazine);
+    await _context.SaveChangesAsync();
+
+    // Calculer la note moyenne et le nombre de commentaires
+    var averageRating = await _context.Ratings
+        .Where(r => r.BookMagazineId == id)
+        .AverageAsync(r => (double?)r.RatingValue) ?? 0;
+
+    var commentCount = await _context.Comments
+        .CountAsync(c => c.BookMagazineId == id);
+
+    return Ok(new {
+        bookMagazine.Id,
+        bookMagazine.Title,
+        bookMagazine.Description,
+        Author = bookMagazine.Author.Name,
+        Category = bookMagazine.Category.Name,
+        bookMagazine.Tags,
+        bookMagazine.CoverImagePath,
+        bookMagazine.FilePath,
+        bookMagazine.UploadDate,
+        bookMagazine.ViewCount,      // Renvoyer le nombre de vues
+        bookMagazine.DownloadCount,   // Renvoyer le nombre de téléchargements
+        AverageRating = averageRating,  // Renvoyer la note moyenne
+        CommentCount = commentCount     // Renvoyer le nombre de commentaires
+    });
 }
+
 ```
 
 ### 7. **Tester les fonctionnalités de statistiques et de rapports**

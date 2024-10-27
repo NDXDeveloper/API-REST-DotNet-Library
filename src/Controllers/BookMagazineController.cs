@@ -200,6 +200,14 @@ public class BookMagazineController : ControllerBase
         _context.BooksMagazines.Update(bookMagazine);
         await _context.SaveChangesAsync();
 
+        // Calculer la note moyenne et le nombre de commentaires
+        var averageRating = await _context.Ratings
+            .Where(r => r.BookMagazineId == id)
+            .AverageAsync(r => (double?)r.RatingValue) ?? 0;
+
+        var commentCount = await _context.Comments
+            .CountAsync(c => c.BookMagazineId == id);
+
         return Ok(new {
             bookMagazine.Id,
             bookMagazine.Title,
@@ -210,7 +218,11 @@ public class BookMagazineController : ControllerBase
             bookMagazine.CoverImagePath,
             bookMagazine.FilePath,
             bookMagazine.UploadDate,
-            bookMagazine.ViewCount // Renvoyer le nombre de vues
+            bookMagazine.ViewCount, // Renvoyer le nombre de vues
+            bookMagazine.DownloadCount,   // Renvoyer le nombre de téléchargements
+            AverageRating = averageRating,  // Renvoyer la note moyenne
+            CommentCount = commentCount     // Renvoyer le nombre de commentaires
+    
         });
     }
 
@@ -707,5 +719,74 @@ public class BookMagazineController : ControllerBase
 
         return Ok(comments);
     }
+
+    // Ajout d'une route API pour afficher les statistiques d’un livre ou magazine spécifique, notamment le nombre de vues, le nombre de téléchargements, la moyenne des notes, et le nombre de commentaires.
+    [HttpGet("{id}/stats")]
+    public IActionResult GetBookMagazineStats(int id)
+    {
+        var bookMagazine = _context.BooksMagazines
+            .Where(b => b.Id == id)
+            .Select(b => new {
+                b.Title,
+                b.ViewCount,
+                b.DownloadCount,
+                AverageRating = _context.Ratings
+                    .Where(r => r.BookMagazineId == id)
+                    .Average(r => (double?)r.RatingValue) ?? 0,
+                CommentCount = _context.Comments.Count(c => c.BookMagazineId == id)
+            })
+            .FirstOrDefault();
+
+        if (bookMagazine == null)
+            return NotFound();
+
+        return Ok(bookMagazine);
+    }
+
+    // Ajoutt d'une route API pour générer un rapport des livres et magazines les plus populaires en fonction du nombre de vues et de téléchargements.
+    [HttpGet("reports/popular")]
+    public IActionResult GetPopularBooksMagazines()
+    {
+        var popularBooksMagazines = _context.BooksMagazines
+            .OrderByDescending(b => b.ViewCount + b.DownloadCount) // Trier par popularité
+            .Select(b => new {
+                b.Title,
+                b.ViewCount,
+                b.DownloadCount,
+                AverageRating = _context.Ratings
+                    .Where(r => r.BookMagazineId == b.Id)
+                    .Average(r => (double?)r.RatingValue) ?? 0
+            })
+            .Take(10) // Limiter à 10 résultats
+            .ToList();
+
+        return Ok(popularBooksMagazines);
+    }
+
+    // Ajout d'une route API pour générer un rapport d’activité par utilisateur, montrant l’interaction de chaque utilisateur avec les livres et magazines.
+    [HttpGet("reports/user-activity")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult GetUserActivityReport()
+    {
+        var userActivity = _context.Users
+            .Select(u => new {
+                u.Id,
+                u.UserName,
+                FavoriteCount = _context.UserFavorites.Count(f => f.UserId == u.Id),
+                CommentCount = _context.Comments.Count(c => c.UserId == u.Id),
+                RatingCount = _context.Ratings.Count(r => r.UserId == u.Id),
+                TotalDownloads = _context.BooksMagazines
+                    .Where(b => _context.UserReadingHistory
+                        .Where(ur => ur.UserId == u.Id)
+                        .Select(ur => ur.BookMagazineId)
+                        .Contains(b.Id))
+                    .Sum(b => b.DownloadCount)
+            })
+            .ToList();
+
+        return Ok(userActivity);
+    }  
+
+
 
 }
