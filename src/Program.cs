@@ -63,6 +63,18 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+
+// Configuration de CORS avec une politique pour les endpoints publics
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("PublicApiPolicy", builder =>
+    {
+        builder.WithOrigins("https://trustedwebsite.com")
+               .AllowAnyHeader()
+               .AllowAnyMethod();
+    });
+});
+
 // Ajout des services de contrôleurs API à l'application
 // Cela permet à l'application de reconnaître et gérer les requêtes HTTP dirigées vers les points de terminaison définis dans les contrôleurs
 builder.Services.AddControllers(); 
@@ -123,6 +135,9 @@ if (app.Environment.IsDevelopment())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "LibraryApi v1");
     });
 }
+
+// Activation de la politique CORS pour les endpoints publics
+app.UseCors("PublicApiPolicy");
 
 // Active l'authentification dans le pipeline des requêtes HTTP
 app.UseAuthentication();
