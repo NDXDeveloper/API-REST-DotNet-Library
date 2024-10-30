@@ -22,4 +22,7 @@ public class ApplicationUser : IdentityUser
      //public IFormFile? ProfilePicture { get; set; }
 
 
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow; 
+
+
 }

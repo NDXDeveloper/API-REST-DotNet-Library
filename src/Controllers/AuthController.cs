@@ -19,60 +19,119 @@ public class AuthController : ControllerBase
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IConfiguration _configuration;
 
+    private readonly ApplicationDbContext _context;
+
     // Constructeur pour injecter les dépendances (services)
-    public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
-        RoleManager<IdentityRole> roleManager, IConfiguration configuration)
+    // public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
+    //     RoleManager<IdentityRole> roleManager, IConfiguration configuration)
+    // {
+    //     _userManager = userManager;
+    //     _signInManager = signInManager;
+    //     _roleManager = roleManager;
+    //     _configuration = configuration;
+    // }
+
+    // Constructeur pour injecter les dépendances (services)
+       public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
+        RoleManager<IdentityRole> roleManager, IConfiguration configuration, ApplicationDbContext context)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _roleManager = roleManager;
         _configuration = configuration;
+        _context = context; // Injection de ApplicationDbContext
     }
+
+    // Ajout de la méthode GetUsers pour afficher la liste des utilisateurs
+    // [HttpGet("users")]
+    // [Authorize(Roles = "Admin")]
+    // public IActionResult GetUsers()
+    // {
+    //     var users = _context.Users
+    //         .Select(u => new UserDto
+    //         {
+    //             Id = u.Id,
+    //             UserName = u.UserName,
+    //             Email = u.Email,
+    //             CreatedAt = u.CreatedAt,
+    //             Role = _context.UserRoles
+    //                     .Where(ur => ur.UserId == u.Id)
+    //                     .Select(ur => ur.Role.Name)
+    //                     .FirstOrDefault()
+    //         })
+    //         .ToList();
+
+    //     return Ok(users);
+    // }
+
+    [HttpGet("users")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult GetUsers()
+    {
+        var users = _context.Users
+            .Select(u => new UserDto
+            {
+                Id = u.Id,
+                UserName = u.UserName,
+                Email = u.Email,
+                Role = _context.UserRoles
+                        .Where(ur => ur.UserId == u.Id)
+                        .Join(_context.Roles,
+                            ur => ur.RoleId,
+                            role => role.Id,
+                            (ur, role) => role.Name)
+                        .FirstOrDefault()
+            })
+            .ToList();
+
+        return Ok(users);
+    }
+
     
     // Action pour mettre à jour le profil de l'utilisateur connecté
     [HttpPut("update-profile")]
-[Authorize]
-public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileModel model)
-{
-    var user = await _userManager.GetUserAsync(User);
-    if (user == null) return NotFound();
-
-    // Mise à jour du nom et de la description
-    if (!string.IsNullOrEmpty(model.FullName))
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileModel model)
     {
-        user.FullName = model.FullName;
-    }
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return NotFound();
 
-    if (!string.IsNullOrEmpty(model.Description))
-    {
-        user.Description = model.Description;
-    }
-
-    // Gestion du fichier d'image de profil
-    if (model.ProfilePicture != null && model.ProfilePicture.Length > 0)
-    {
-        // Définir le chemin où stocker l'image (wwwroot/images/profiles/)
-        var imagePath = Path.Combine("wwwroot/images/profiles", $"{user.Id}_{model.ProfilePicture.FileName}");
-        
-        // Sauvegarder l'image sur le serveur
-        using (var stream = new FileStream(imagePath, FileMode.Create))
+        // Mise à jour du nom et de la description
+        if (!string.IsNullOrEmpty(model.FullName))
         {
-            await model.ProfilePicture.CopyToAsync(stream);
+            user.FullName = model.FullName;
         }
 
-        // Stocker le chemin relatif dans la base de données
-        user.ProfilePicture = $"/images/profiles/{user.Id}_{model.ProfilePicture.FileName}";
-    }
+        if (!string.IsNullOrEmpty(model.Description))
+        {
+            user.Description = model.Description;
+        }
 
-    // Sauvegarder les modifications dans la base de données
-    var result = await _userManager.UpdateAsync(user);
-    if (result.Succeeded)
-    {
-        return Ok(new { Message = "Profile updated successfully!", ProfilePictureUrl = user.ProfilePicture });
-    }
+        // Gestion du fichier d'image de profil
+        if (model.ProfilePicture != null && model.ProfilePicture.Length > 0)
+        {
+            // Définir le chemin où stocker l'image (wwwroot/images/profiles/)
+            var imagePath = Path.Combine("wwwroot/images/profiles", $"{user.Id}_{model.ProfilePicture.FileName}");
+            
+            // Sauvegarder l'image sur le serveur
+            using (var stream = new FileStream(imagePath, FileMode.Create))
+            {
+                await model.ProfilePicture.CopyToAsync(stream);
+            }
 
-    return BadRequest(result.Errors);
-}
+            // Stocker le chemin relatif dans la base de données
+            user.ProfilePicture = $"/images/profiles/{user.Id}_{model.ProfilePicture.FileName}";
+        }
+
+        // Sauvegarder les modifications dans la base de données
+        var result = await _userManager.UpdateAsync(user);
+        if (result.Succeeded)
+        {
+            return Ok(new { Message = "Profile updated successfully!", ProfilePictureUrl = user.ProfilePicture });
+        }
+
+        return BadRequest(result.Errors);
+    }
 
     // [HttpPut("update-profile")]
     // [Authorize]
@@ -186,4 +245,6 @@ public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileModel mod
         // Création du token avec des informations comme l'émetteur, l'audience, et la durée d'expiration
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    
 }

@@ -186,6 +186,49 @@ public class BookMagazineController : ControllerBase
         return Ok(booksMagazines);
     }
 
+    // *** Obtenir une liste paginée des livres ou magazines ***
+    [HttpGet("list/paged")]
+    public IActionResult GetBooksMagazinesPaged([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    {
+        if (page <= 0 || pageSize <= 0)
+        {
+            return BadRequest("Page and pageSize must be greater than 0.");
+        }
+
+        var skip = (page - 1) * pageSize;
+
+        var pagedBooksMagazines = _context.BooksMagazines
+            .Select(b => new
+            {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                Category = b.Category.Name,
+                b.CoverImagePath,
+                b.UploadDate,
+                b.ViewCount
+            })
+            .Skip(skip)   // Ignorer les enregistrements des pages précédentes
+            .Take(pageSize)  // Limiter le nombre d'enregistrements au pageSize
+            .ToList();
+
+        // Total de livres ou magazines pour la pagination
+        var totalItems = _context.BooksMagazines.Count();
+        var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+        var result = new
+        {
+            CurrentPage = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            TotalItems = totalItems,
+            Items = pagedBooksMagazines
+        };
+
+        return Ok(result);
+    }
+
+
     //*** Obtenir les détails d'un livre ou magazine spécifique ***
     // [HttpGet("{id}")]
     // public IActionResult GetBookMagazine(int id)
@@ -466,6 +509,56 @@ public class BookMagazineController : ControllerBase
         return Ok(booksMagazines);
     }
 
+// *** Recherche paginée des livres ou magazines ***
+[HttpGet("search/paged")]
+public IActionResult SearchBooksMagazinesPaged([FromQuery] string keyword, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+{
+    if (page <= 0 || pageSize <= 0)
+    {
+        return BadRequest("Page and pageSize must be greater than 0.");
+    }
+
+    var query = _context.BooksMagazines.AsQueryable();
+
+    // Filtrer par mot-clé (titre, description, auteur, tags)
+    if (!string.IsNullOrEmpty(keyword))
+    {
+        query = query.Where(b => b.Title.Contains(keyword) || 
+                                 b.Description.Contains(keyword) || 
+                                 b.Author.Name.Contains(keyword) || 
+                                 b.Tags.Contains(keyword));
+    }
+
+    var totalItems = query.Count();   // Nombre total d'éléments correspondant aux critères de recherche
+    var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+    // Pagination : ignorer les éléments des pages précédentes et limiter au pageSize
+    var pagedResults = query
+        .Select(b => new {
+            b.Id,
+            b.Title,
+            Author = b.Author.Name,
+            b.CoverImagePath,
+            b.UploadDate,
+            b.ViewCount
+        })
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToList();
+
+    var result = new
+    {
+        CurrentPage = page,
+        PageSize = pageSize,
+        TotalPages = totalPages,
+        TotalItems = totalItems,
+        Items = pagedResults
+    };
+
+    return Ok(result);
+}
+
+
     [HttpGet("advanced-search")]
     public IActionResult SearchBooksMagazines([FromQuery] string keyword, [FromQuery] string category, [FromQuery] string author, [FromQuery] DateTime? publishDate, [FromQuery] bool sortByPopularity = false)
     {
@@ -511,6 +604,78 @@ public class BookMagazineController : ControllerBase
         return Ok(results);
     }
 
+    // *** Recherche avancée avec pagination des livres ou magazines ***
+    [HttpGet("advanced-search/paged")]
+    public IActionResult SearchBooksMagazinesPaged(
+        [FromQuery] string keyword,
+        [FromQuery] string category,
+        [FromQuery] string author,
+        [FromQuery] DateTime? publishDate,
+        [FromQuery] bool sortByPopularity = false,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        if (page <= 0 || pageSize <= 0)
+            return BadRequest("Page and pageSize must be greater than zero.");
+
+        var query = _context.BooksMagazines.AsQueryable();
+
+        // Application des filtres
+        if (!string.IsNullOrEmpty(keyword))
+        {
+            query = query.Where(b => b.Title.Contains(keyword) || 
+                                    b.Description.Contains(keyword) || 
+                                    b.Tags.Contains(keyword));
+        }
+
+        if (!string.IsNullOrEmpty(category))
+        {
+            query = query.Where(b => b.Category.Name == category);
+        }
+
+        if (!string.IsNullOrEmpty(author))
+        {
+            query = query.Where(b => b.Author.Name == author);
+        }
+
+        if (publishDate.HasValue)
+        {
+            query = query.Where(b => b.UploadDate >= publishDate.Value);
+        }
+
+        // Tri par popularité (ViewCount) si demandé
+        if (sortByPopularity)
+        {
+            query = query.OrderByDescending(b => b.ViewCount);
+        }
+
+        // Calcul pour pagination
+        var totalItems = query.Count();
+        var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+        var pagedResults = query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(b => new {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                b.CoverImagePath,
+                b.UploadDate,
+                b.ViewCount
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            TotalItems = totalItems,
+            Results = pagedResults
+        });
+    }
+
   
     [HttpGet("search/popular")]
     public IActionResult SearchBooksMagazinesByPopularity()
@@ -530,6 +695,44 @@ public class BookMagazineController : ControllerBase
         return Ok(booksMagazines);
     }
 
+    // *** Recherche des livres ou magazines populaires avec pagination ***
+    [HttpGet("search/popular/paged")]
+    public IActionResult SearchBooksMagazinesByPopularityPaged([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    {
+        if (page <= 0 || pageSize <= 0)
+            return BadRequest("Page and pageSize must be greater than zero.");
+
+        var query = _context.BooksMagazines
+            .OrderByDescending(b => b.ViewCount); // Tri par le compteur de vues (popularité)
+
+        // Calcul pour pagination
+        var totalItems = query.Count();
+        var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+        var pagedResults = query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(b => new {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                b.CoverImagePath,
+                b.UploadDate,
+                b.ViewCount  // Inclure le nombre de vues dans la réponse
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            TotalItems = totalItems,
+            Results = pagedResults
+        });
+    }
+
+
     [HttpGet("search/popular-downloads")]
     public IActionResult SearchBooksMagazinesByDownloads()
     {
@@ -547,6 +750,44 @@ public class BookMagazineController : ControllerBase
 
         return Ok(booksMagazines);
     }
+
+    // *** Recherche des livres ou magazines les plus téléchargés avec pagination ***
+    [HttpGet("search/popular-downloads/paged")]
+    public IActionResult SearchBooksMagazinesByDownloadsPaged([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    {
+        if (page <= 0 || pageSize <= 0)
+            return BadRequest("Page and pageSize must be greater than zero.");
+
+        var query = _context.BooksMagazines
+            .OrderByDescending(b => b.DownloadCount); // Tri par le compteur de téléchargements
+
+        // Calcul pour pagination
+        var totalItems = query.Count();
+        var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+        var pagedResults = query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(b => new {
+                b.Id,
+                b.Title,
+                Author = b.Author.Name,
+                b.CoverImagePath,
+                b.UploadDate,
+                b.DownloadCount  // Inclure le nombre de téléchargements dans la réponse
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            TotalItems = totalItems,
+            Results = pagedResults
+        });
+    }
+
 
     [HttpGet("suggestions")]
     [Authorize]
@@ -784,6 +1025,51 @@ public class BookMagazineController : ControllerBase
         return Ok(comments);
     }
 
+    // *** Obtenir les commentaires pour un livre ou magazine avec pagination ***
+    [HttpGet("{bookMagazineId}/comments/paged")]
+    public IActionResult GetCommentsPaged(int bookMagazineId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    {
+        if (page <= 0 || pageSize <= 0)
+            return BadRequest("Page and pageSize must be greater than zero.");
+
+        var query = _context.Comments
+            .Where(c => c.BookMagazineId == bookMagazineId);
+
+        // Calcul pour pagination
+        var totalItems = query.Count();
+        var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+        var pagedResults = query
+            .OrderBy(c => c.CommentDate)  // Optionnel : trier les commentaires par date
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(c => new {
+                c.Id,
+                c.Content,
+                c.CommentDate,
+                c.UserId,
+                Replies = _context.Comments
+                    .Where(r => r.ParentCommentId == c.Id)
+                    .Select(r => new {
+                        r.Id,
+                        r.Content,
+                        r.CommentDate,
+                        r.UserId
+                    }).ToList()
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            TotalItems = totalItems,
+            Comments = pagedResults
+        });
+    }
+
+
     // Ajout d'une route API pour afficher les statistiques d’un livre ou magazine spécifique, notamment le nombre de vues, le nombre de téléchargements, la moyenne des notes, et le nombre de commentaires.
     [HttpGet("{id}/stats")]
     public IActionResult GetBookMagazineStats(int id)
@@ -850,6 +1136,44 @@ public class BookMagazineController : ControllerBase
 
         return Ok(userActivity);
     }  
+
+    [HttpGet("reports/user-activity/paged")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult GetUserActivityReport([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+    {
+        if (pageNumber <= 0 || pageSize <= 0)
+        {
+            return BadRequest("Page number and page size must be greater than zero.");
+        }
+
+        var totalUsers = _context.Users.Count();
+
+        var userActivity = _context.Users
+            .OrderBy(u => u.UserName) // Ordre stable pour la pagination
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new {
+                u.Id,
+                u.UserName,
+                FavoriteCount = _context.UserFavorites.Count(f => f.UserId == u.Id),
+                CommentCount = _context.Comments.Count(c => c.UserId == u.Id),
+                RatingCount = _context.Ratings.Count(r => r.UserId == u.Id),
+                TotalDownloads = _context.UserReadingHistory
+                    .Where(ur => ur.UserId == u.Id)
+                    .Join(_context.BooksMagazines, ur => ur.BookMagazineId, bm => bm.Id, (ur, bm) => bm.DownloadCount)
+                    .Sum() // Somme des téléchargements
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            TotalUsers = totalUsers,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalPages = (int)Math.Ceiling(totalUsers / (double)pageSize),
+            UserActivity = userActivity
+        });
+    }
 
 
 
