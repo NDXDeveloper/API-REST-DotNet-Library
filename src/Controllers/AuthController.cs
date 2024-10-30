@@ -68,13 +68,18 @@ public class AuthController : ControllerBase
     [Authorize(Roles = "Admin")]
     public IActionResult GetUsers()
     {
+        if (_context.UserRoles == null || _context.Roles == null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, "Roles or UserRoles is not properly configured in the database context.");
+        }
+
         var users = _context.Users
             .Select(u => new UserDto
             {
                 Id = u.Id,
-                UserName = u.UserName,
-                Email = u.Email,
-                Role = _context.UserRoles
+                UserName = u.UserName!,
+                Email = u.Email!,
+                Role = _context.UserRoles!
                         .Where(ur => ur.UserId == u.Id)
                         .Join(_context.Roles,
                             ur => ur.RoleId,
@@ -86,6 +91,26 @@ public class AuthController : ControllerBase
 
         return Ok(users);
     }
+
+    /* à envisager :
+    Récupérer la liste des utilisateurs :
+    Dans une méthode pour récupérer tous les utilisateurs (par exemple, GetAllUsers() ou GetUsers()), UserDto est pratique pour filtrer et structurer les informations utilisateur avant de les renvoyer au client.
+
+    Récupérer les informations d’un utilisateur spécifique :
+    Une méthode comme GetUserById() ou GetUserProfile() pourrait utiliser UserDto pour fournir des informations détaillées sur un utilisateur spécifique sans exposer d’informations sensibles.
+
+    Filtrer les utilisateurs par rôles :
+    Si vous avez une méthode comme GetUsersByRole(string roleName) pour récupérer uniquement les utilisateurs ayant un rôle spécifique, UserDto serait idéal pour structurer la réponse sans exposer l’intégralité des entités ApplicationUser.
+
+    Rechercher des utilisateurs par critères :
+    Une méthode SearchUsers(string query) pourrait utiliser UserDto pour renvoyer des informations utilisateur en réponse à des critères de recherche, limitant les données renvoyées au strict nécessaire.
+
+    Afficher l'activité d'un utilisateur :
+    Dans des méthodes pour afficher les activités des utilisateurs, comme l’historique des favoris ou les statistiques d’utilisation, UserDto permet d’inclure seulement les informations essentielles d'un utilisateur.
+
+    Notifications ou activité récente :
+    Dans des méthodes pour afficher les notifications d’un utilisateur ou l’activité récente, UserDto est utile pour structurer les informations utilisateur dans la réponse de manière sécurisée.
+    */
 
     
     // Action pour mettre à jour le profil de l'utilisateur connecté
@@ -197,6 +222,13 @@ public class AuthController : ControllerBase
         {   
             // Si la connexion réussit, récupérer l'utilisateur et ses rôles
             var user = await _userManager.FindByEmailAsync(model.Email);
+
+            // Vérifier si l'utilisateur est nul
+            if (user == null)
+            {
+                return Unauthorized(); // Si l'utilisateur n'existe pas, retourner une erreur Unauthorized
+            }
+
             var roles = await _userManager.GetRolesAsync(user); 
 
             // Générer un token JWT pour l'utilisateur
@@ -225,15 +257,16 @@ public class AuthController : ControllerBase
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.UserName)
+            new Claim(JwtRegisteredClaimNames.Email, user.Email!),
+            new Claim(ClaimTypes.Name, user.UserName!)
         };
 
         // Ajout des rôles en tant que claims
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         // Récupération de la clé secrète pour signer le token 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]  ?? throw new InvalidOperationException("JWT Key is not configured.")));
+
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],

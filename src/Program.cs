@@ -59,7 +59,8 @@ builder.Services.AddAuthentication(options =>
         // Spécifie l'audience valide du jeton (qui doit être le consommateur du jeton, par exemple une application cliente)
         ValidAudience = builder.Configuration["Jwt:Audience"],
         // Clé utilisée pour signer le jeton, encodée en UTF-8
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        //IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured.")))
     };
 });
 
