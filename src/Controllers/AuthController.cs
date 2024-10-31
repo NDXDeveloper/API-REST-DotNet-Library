@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;  // Pour gérer la validation et la signat
 using System.Text;  // Pour encoder les clés de sécurité
 using Microsoft.AspNetCore.Http;  // Pour utiliser IFormFile
 using System.IO;  // Pour utiliser Path et FileStream
+using Microsoft.EntityFrameworkCore; // Pour utiliser la méthode Include
 
 // Attributs de route et API pour lier ce contrôleur à une route "api/Auth"
 [Route("api/[controller]")]
@@ -40,56 +41,6 @@ public class AuthController : ControllerBase
         _roleManager = roleManager;
         _configuration = configuration;
         _context = context; // Injection de ApplicationDbContext
-    }
-
-    // Ajout de la méthode GetUsers pour afficher la liste des utilisateurs
-    // [HttpGet("users")]
-    // [Authorize(Roles = "Admin")]
-    // public IActionResult GetUsers()
-    // {
-    //     var users = _context.Users
-    //         .Select(u => new UserDto
-    //         {
-    //             Id = u.Id,
-    //             UserName = u.UserName,
-    //             Email = u.Email,
-    //             CreatedAt = u.CreatedAt,
-    //             Role = _context.UserRoles
-    //                     .Where(ur => ur.UserId == u.Id)
-    //                     .Select(ur => ur.Role.Name)
-    //                     .FirstOrDefault()
-    //         })
-    //         .ToList();
-
-    //     return Ok(users);
-    // }
-
-    [HttpGet("users")]
-    [Authorize(Roles = "Admin")]
-    public IActionResult GetUsers()
-    {
-        if (_context.UserRoles == null || _context.Roles == null)
-        {
-            return StatusCode(StatusCodes.Status500InternalServerError, "Roles or UserRoles is not properly configured in the database context.");
-        }
-
-        var users = _context.Users
-            .Select(u => new UserDto
-            {
-                Id = u.Id,
-                UserName = u.UserName!,
-                Email = u.Email!,
-                Role = _context.UserRoles!
-                        .Where(ur => ur.UserId == u.Id)
-                        .Join(_context.Roles,
-                            ur => ur.RoleId,
-                            role => role.Id,
-                            (ur, role) => role.Name)
-                        .FirstOrDefault()
-            })
-            .ToList();
-
-        return Ok(users);
     }
 
     /* à envisager :
@@ -278,6 +229,163 @@ public class AuthController : ControllerBase
         // Création du token avec des informations comme l'émetteur, l'audience, et la durée d'expiration
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+
+
+    // Ajout de la méthode GetUsers pour afficher la liste des utilisateurs
+    // [HttpGet("users")]
+    // [Authorize(Roles = "Admin")]
+    // public IActionResult GetUsers()
+    // {
+    //     var users = _context.Users
+    //         .Select(u => new UserDto
+    //         {
+    //             Id = u.Id,
+    //             UserName = u.UserName,
+    //             Email = u.Email,
+    //             CreatedAt = u.CreatedAt,
+    //             Role = _context.UserRoles
+    //                     .Where(ur => ur.UserId == u.Id)
+    //                     .Select(ur => ur.Role.Name)
+    //                     .FirstOrDefault()
+    //         })
+    //         .ToList();
+
+    //     return Ok(users);
+    // }
+
+    [HttpGet("users")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult GetUsers()
+    {
+        if (_context.UserRoles == null || _context.Roles == null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, "Roles or UserRoles is not properly configured in the database context.");
+        }
+
+        var users = _context.Users
+            .Select(u => new UserDto
+            {
+                Id = u.Id,
+                UserName = u.UserName!,
+                Email = u.Email!,
+                Role = _context.UserRoles!
+                        .Where(ur => ur.UserId == u.Id)
+                        .Join(_context.Roles,
+                            ur => ur.RoleId,
+                            role => role.Id,
+                            (ur, role) => role.Name)
+                        .FirstOrDefault()
+            })
+            .ToList();
+
+        return Ok(users);
+    }
+
+
+    [HttpGet("users/{id}")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult GetUserById(string id)
+    {
+        var user = _context.Users
+            .Where(u => u.Id == id)
+            .Select(u => new UserDto
+            {
+                Id = u.Id,
+                UserName = u.UserName!,
+                Email = u.Email!,
+                Role = _context.UserRoles
+                        .Where(ur => ur.UserId == u.Id)
+                        .Join(_context.Roles,
+                            ur => ur.RoleId,
+                            role => role.Id,
+                            (ur, role) => role.Name)
+                        .FirstOrDefault()
+            })
+            .FirstOrDefault();
+
+        if (user == null)
+        {
+            return NotFound($"User with id {id} not found.");
+        }
+
+        return Ok(user);
+    }
+
+    [HttpGet("users/role/{roleName}")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult GetUsersByRole(string roleName)
+    {
+
+        // Récupérer le rôle correspondant
+        var role = _context.Roles.FirstOrDefault(r => r.Name == roleName);
+
+        // Vérifier si le rôle existe
+        if (role == null)
+        {
+            return NotFound($"Role '{roleName}' not found.");
+        }
+
+        var users = _context.Users
+            .Where(u => _context.UserRoles
+                .Any(ur => ur.UserId == u.Id && ur.RoleId == role.Id)) // Utiliser l'ID du rôle récupéré
+            .Select(u => new UserDto
+            {
+                Id = u.Id,
+                UserName = u.UserName!,
+                Email = u.Email!,
+                Role = roleName
+            })
+            .ToList();
+
+        return Ok(users);
+    }
+
+    [HttpGet("users/search")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult SearchUsers([FromQuery] string query)
+    {
+        var users = _context.Users
+            .Where(u => u.UserName!.Contains(query) || u.Email!.Contains(query))
+            .Select(u => new UserDto
+            {
+                Id = u.Id,
+                UserName = u.UserName!,
+                Email = u.Email!,
+                Role = _context.UserRoles
+                        .Where(ur => ur.UserId == u.Id)
+                        .Join(_context.Roles,
+                            ur => ur.RoleId,
+                            role => role.Id,
+                            (ur, role) => role.Name)
+                        .FirstOrDefault()
+            })
+            .ToList();
+
+        return Ok(users);
+    }
+
+    [HttpGet("users/{id}/notifications")]
+[Authorize]
+public IActionResult GetUserNotifications(string id)
+{
+    var notifications = _context.UserNotifications
+        .Where(un => un.UserId == id)
+        .Include(un => un.Notification)  // Charger la notification associée
+        .Select(un => new 
+        {
+            NotificationId = un.NotificationId,
+            Content = un.Notification != null ? un.Notification.Content : "No content available", // Gestion de nullité
+            IsRead = un.Notification != null && un.Notification.IsRead // Gestion de nullité
+        })
+        .ToList();
+
+    return Ok(notifications);
+}
+
+
+
+
 
     
 }
