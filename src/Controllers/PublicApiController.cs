@@ -2,6 +2,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Threading.Tasks;
+using LibraryAPI.Data;
+using LibraryAPI.Models;
+
+namespace LibraryAPI.Controllers
+{
 
 [Route("api/public")]
 [ApiController]
@@ -67,4 +72,6 @@ public class PublicApiController : ControllerBase
 
         return Ok(recentComments);
     }
+}
+
 }

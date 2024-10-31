@@ -1,23 +1,28 @@
 using Microsoft.AspNetCore.Http;
 using System.ComponentModel.DataAnnotations;
 
-public class BookMagazineModel
+namespace LibraryAPI.Models
 {
-    [Required]
-    public string? Title { get; set; }
 
-    [Required]
-    public string? Author { get; set; }  // L'auteur est désormais un champ texte
+    public class BookMagazineModel
+    {
+        [Required]
+        public string? Title { get; set; }
 
-    public string? Description { get; set; }
+        [Required]
+        public string? Author { get; set; }  // L'auteur est désormais un champ texte
 
-    [Required]
-    public string? Category { get; set; }  // La catégorie est désormais un champ texte
+        public string? Description { get; set; }
 
-    public string? Tags { get; set; }
+        [Required]
+        public string? Category { get; set; }  // La catégorie est désormais un champ texte
 
-    [Required]
-    public IFormFile? File { get; set; }
+        public string? Tags { get; set; }
 
-    public IFormFile? CoverImage { get; set; }  // Optionnel, image de couverture
+        [Required]
+        public IFormFile? File { get; set; }
+
+        public IFormFile? CoverImage { get; set; }  // Optionnel, image de couverture
+    }
+    
 }

@@ -11,6 +11,9 @@ using Microsoft.AspNetCore.Identity;
 // Importation des bibliothèques nécessaires pour configurer Swagger, un outil de documentation d'API
 using Microsoft.OpenApi.Models; 
 
+using LibraryAPI.Models;
+using LibraryAPI.Data;
+
 // Initialisation du constructeur d'application Web avec les paramètres passés (ici, les arguments d'exécution)
 var builder = WebApplication.CreateBuilder(args);
 

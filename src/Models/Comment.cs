@@ -1,26 +1,31 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 
-public class Comment
+namespace LibraryAPI.Models
 {
-    [Key]
-    public int Id { get; set; }
 
-    [Required]
-    public int BookMagazineId { get; set; }
+    public class Comment
+    {
+        [Key]
+        public int Id { get; set; }
 
-    [Required]
-    public string UserId { get; set; }  // ID de l'utilisateur qui a laissé le commentaire
+        [Required]
+        public int BookMagazineId { get; set; }
 
-    [Required]
-    public string Content { get; set; }  // Contenu du commentaire
+        [Required]
+        public string UserId { get; set; }  // ID de l'utilisateur qui a laissé le commentaire
 
-    public DateTime CommentDate { get; set; } = DateTime.Now;  // Date du commentaire
+        [Required]
+        public string Content { get; set; }  // Contenu du commentaire
 
-    public int? ParentCommentId { get; set; }  // ID du commentaire parent (si c'est une réponse)
+        public DateTime CommentDate { get; set; } = DateTime.Now;  // Date du commentaire
 
-    // Relations avec BookMagazine, ApplicationUser et le commentaire parent
-    public BookMagazine BookMagazine { get; set; }
-    public ApplicationUser User { get; set; }
-    public Comment ParentComment { get; set; }
+        public int? ParentCommentId { get; set; }  // ID du commentaire parent (si c'est une réponse)
+
+        // Relations avec BookMagazine, ApplicationUser et le commentaire parent
+        public BookMagazine BookMagazine { get; set; }
+        public ApplicationUser User { get; set; }
+        public Comment ParentComment { get; set; }
+    }
+    
 }

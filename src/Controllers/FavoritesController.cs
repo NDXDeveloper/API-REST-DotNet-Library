@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization; // Nécessaire pour gérer l'authentif
 using Microsoft.AspNetCore.Mvc; // Fournit les outils pour créer des API RESTful, comme les contrôleurs et les actions HTTP (GET, POST, etc.).
 using Microsoft.EntityFrameworkCore; // Permet d'utiliser Entity Framework Core pour interagir avec la base de données via le contexte de données (ApplicationDbContext).
 using System.Security.Claims; // Utilisé pour manipuler les informations des utilisateurs (claims) dans les tokens d'authentification, comme l'identifiant de l'utilisateur (UserId).
+using LibraryAPI.Data;
+using LibraryAPI.Models;
 
 namespace LibraryAPI.Controllers
 {

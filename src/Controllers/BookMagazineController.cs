@@ -5,7 +5,11 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Security.Claims; // Utilisé pour manipuler les informations des utilisateurs (claims) dans les tokens d'authentification, comme l'identifiant de l'utilisateur (UserId).
+using LibraryAPI.Data;
+using LibraryAPI.Models;
 
+namespace LibraryAPI.Controllers
+{
 
 [Route("api/[controller]")]
 [ApiController]
@@ -1176,5 +1180,7 @@ public IActionResult SearchBooksMagazinesPaged([FromQuery] string keyword, [From
     }
 
 
+
+}
 
 }

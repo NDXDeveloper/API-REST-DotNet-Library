@@ -3,7 +3,8 @@ using Microsoft.AspNetCore.Mvc; // Fournit les outils essentiels pour créer des
 using Microsoft.EntityFrameworkCore; // Permet l'utilisation d'Entity Framework Core pour interagir avec la base de données et effectuer des opérations CRUD.
 //using System.IdentityModel.Tokens.Jwt; // Commenté car non utilisé. Ce namespace est utile pour manipuler les JWT (JSON Web Tokens) directement si nécessaire.
 using System.Security.Claims; // Utilisé pour extraire des informations de l'utilisateur connecté (via les claims, comme l'identifiant d'utilisateur) à partir de son token d'authentification.
-
+using LibraryAPI.Data;
+using LibraryAPI.Models;
 
 namespace LibraryAPI.Controllers
 {

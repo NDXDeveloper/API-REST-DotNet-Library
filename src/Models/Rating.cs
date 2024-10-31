@@ -1,24 +1,29 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 
-public class Rating
+namespace LibraryAPI.Models
 {
-    [Key]
-    public int Id { get; set; }
 
-    [Required]
-    public int BookMagazineId { get; set; }
+    public class Rating
+    {
+        [Key]
+        public int Id { get; set; }
 
-    [Required]
-    public string UserId { get; set; }  // ID de l'utilisateur qui a donné la note
+        [Required]
+        public int BookMagazineId { get; set; }
 
-    [Required]
-    [Range(1, 5)]
-    public int RatingValue { get; set; }  // La note attribuée (de 1 à 5)
+        [Required]
+        public string UserId { get; set; }  // ID de l'utilisateur qui a donné la note
 
-    public DateTime RatingDate { get; set; } = DateTime.Now;  // Date de la note
+        [Required]
+        [Range(1, 5)]
+        public int RatingValue { get; set; }  // La note attribuée (de 1 à 5)
 
-    // Relations avec BookMagazine et ApplicationUser
-    public BookMagazine BookMagazine { get; set; }
-    public ApplicationUser User { get; set; }
+        public DateTime RatingDate { get; set; } = DateTime.Now;  // Date de la note
+
+        // Relations avec BookMagazine et ApplicationUser
+        public BookMagazine BookMagazine { get; set; }
+        public ApplicationUser User { get; set; }
+    }
+    
 }

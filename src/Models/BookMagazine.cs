@@ -1,47 +1,52 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-public class BookMagazine
+namespace LibraryAPI.Models
 {
-    [Key]
-    public int Id { get; set; }
 
-    [Required]
-    public string Title { get; set; }
+    public class BookMagazine
+    {
+        [Key]
+        public int Id { get; set; }
 
-    [Required]
-    public int AuthorId { get; set; }  // Foreign key vers l'auteur
-    [ForeignKey("AuthorId")]
-    public Author Author { get; set; }
+        [Required]
+        public string Title { get; set; }
 
-    public string Description { get; set; }
+        [Required]
+        public int AuthorId { get; set; }  // Foreign key vers l'auteur
+        [ForeignKey("AuthorId")]
+        public Author Author { get; set; }
 
-    [Required]
-    public int CategoryId { get; set; }  // Foreign key vers la catégorie
-    [ForeignKey("CategoryId")]
-    public Category Category { get; set; }
+        public string Description { get; set; }
 
-    public string Tags { get; set; }
+        [Required]
+        public int CategoryId { get; set; }  // Foreign key vers la catégorie
+        [ForeignKey("CategoryId")]
+        public Category Category { get; set; }
 
-    [Required]
-    public string FilePath { get; set; }
+        public string Tags { get; set; }
 
-    public string CoverImagePath { get; set; }
+        [Required]
+        public string FilePath { get; set; }
 
-    public DateTime UploadDate { get; set; } = DateTime.Now;
+        public string CoverImagePath { get; set; }
 
-    // Nouveau champ pour suivre le nombre de vues
-    public int ViewCount { get; set; } = 0;  // Initialisé à 0
+        public DateTime UploadDate { get; set; } = DateTime.Now;
 
-    // Ou si vous préférez un compteur de téléchargements
-    public int DownloadCount { get; set; } = 0;  // Initialisé à 0
+        // Nouveau champ pour suivre le nombre de vues
+        public int ViewCount { get; set; } = 0;  // Initialisé à 0
 
-    // Ajout d'une nouvelle propriété pour stocker le nom original du fichier
-    public string OriginalFileName { get; set; }
+        // Ou si vous préférez un compteur de téléchargements
+        public int DownloadCount { get; set; } = 0;  // Initialisé à 0
 
-    public string OriginalCoverImageName { get; set; } // Stocker le nom original de l'image de couverture
+        // Ajout d'une nouvelle propriété pour stocker le nom original du fichier
+        public string OriginalFileName { get; set; }
 
-    public double AverageRating { get; set; }  // Nouveau champ pour stocker la note moyenne
+        public string OriginalCoverImageName { get; set; } // Stocker le nom original de l'image de couverture
+
+        public double AverageRating { get; set; }  // Nouveau champ pour stocker la note moyenne
 
 
+    }
+    
 }
