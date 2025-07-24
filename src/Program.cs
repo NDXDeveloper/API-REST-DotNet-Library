@@ -127,10 +127,19 @@ builder.Services.AddScoped<EmailService>();
 // Construction de l'application avec tous les services configurés précédemment
 var app = builder.Build();
 
+app.UseHttpsRedirection(); // ← Déjà présent
+
+// Optionnel : Forcer HTTPS en développement
+if (app.Environment.IsDevelopment())
+{
+    app.UseHsts(); // HTTP Strict Transport Security
+}
+
 app.UseStaticFiles();  // Permet de servir les fichiers statiques depuis wwwroot
 
 // Configuration pour n'activer Swagger que dans l'environnement de développement (en évitant d'exposer la documentation en production)
-if (app.Environment.IsDevelopment())
+//if (app.Environment.IsDevelopment())
+if (builder.Configuration.GetValue<bool>("EnableSwagger"))
 {
     app.UseSwagger();  // Active Swagger pour générer la documentation API
     app.UseSwaggerUI(c =>
@@ -149,8 +158,59 @@ app.UseAuthentication();
 // Active l'autorisation (vérification des droits d'accès aux ressources) dans le pipeline des requêtes HTTP
 app.UseAuthorization();
 
+// ... tout votre code existant jusqu'à ...
+
 // Mappage des contrôleurs API pour gérer les requêtes HTTP et les rediriger vers les contrôleurs appropriés
 app.MapControllers();
+
+app.MapGet("/", () => "Library API is running! Go to /swagger for documentation.");
+
+// Initialisation des rôles et de l'utilisateur admin au démarrage pour BDD vide
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+    // Créer le rôle Admin s'il n'existe pas
+    if (!await roleManager.RoleExistsAsync("Admin"))
+        await roleManager.CreateAsync(new IdentityRole("Admin"));
+
+    // Créer le rôle User s'il n'existe pas
+    if (!await roleManager.RoleExistsAsync("User"))
+        await roleManager.CreateAsync(new IdentityRole("User"));
+
+    // Vérifier s'il existe déjà un utilisateur avec le rôle Admin
+    var existingAdmins = await userManager.GetUsersInRoleAsync("Admin");
+    if (!existingAdmins.Any())
+    {
+        var user = new ApplicationUser
+        {
+            UserName = "admin@library.com",
+            Email = "admin@library.com",
+            FullName = "Admin",
+            Description = "Administrator Account",
+            ProfilePicture = null, // Champ nullable
+            EmailConfirmed = true // Confirmer l'email directement
+        };
+
+        var result = await userManager.CreateAsync(user, "AdminPass123!");
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(user, "Admin");
+            Console.WriteLine("Admin user created: admin@library.com / AdminPass123!");
+        }
+        else
+        {
+            Console.WriteLine("Failed to create admin user:");
+            foreach (var error in result.Errors)
+            {
+                Console.WriteLine($"- {error.Description}");
+            }
+        }
+    }
+}
+
+
 
 // Lancement de l'application (écoute des requêtes entrantes)
 app.Run();
