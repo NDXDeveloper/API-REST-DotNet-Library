@@ -660,3 +660,5 @@ docker-build-versioned:
 		-t $(DOCKER_IMAGE):$(if $(findstring dev,$(VERSION)),dev,$(shell echo $(VERSION) | sed 's/^v//')) \
 		-t $(DOCKER_IMAGE):latest .
 	@echo "$(GREEN)✅ Image Docker créée$(NC)"
+
+
