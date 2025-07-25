@@ -22,292 +22,194 @@ public class BookMagazineController : ControllerBase
         _context = context;
     }
 
-        // // *** Ajouter un livre ou magazine avec un auteur et une catégorie ***
-        // [HttpPost("add")]
-        // [Authorize]
-        // public async Task<IActionResult> AddBookMagazine([FromForm] BookMagazineModel model)
-        // {
-        //     // Récupération de l'ID de l'utilisateur
-        //     var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        //     // Vérifier si l'auteur existe, sinon le créer
-        //     var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
-        //     if (author == null)
-        //     {
-        //         author = new Author { Name = model.Author };
-        //         _context.Authors.Add(author);
-        //         await _context.SaveChangesAsync();
-        //     }
-
-        //     // Vérifier si la catégorie existe, sinon la créer
-        //     var category = _context.Categories.FirstOrDefault(c => c.Name == model.Category);
-        //     if (category == null)
-        //     {
-        //         category = new Category { Name = model.Category };
-        //         _context.Categories.Add(category);
-        //         await _context.SaveChangesAsync();
-        //     }
-
-        //     // Enregistrement du fichier du livre/magazine
-        //     // var filePath = Path.Combine("wwwroot/files", model.File.FileName);
-        //     // Générer un nom de fichier unique (UUID)
-        //     //var uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";  // Conserver l'extension originale
-        //     // Générer un nom de fichier unique (UUID)
-        //     string uniqueFileName;
-        //     do
-        //     {
-        //         uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";
-        //     }
-        //     while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));  // Vérification de l'unicité
-
-        //     // Sauvegarder l'UUID dans la table FileUuids
-        //     var fileUuid = new FileUuid { Uuid = uniqueFileName };
-        //     _context.FileUuids.Add(fileUuid);
-        //     await _context.SaveChangesAsync();
-
-        //     var filePath = Path.Combine("wwwroot/files", uniqueFileName); // Enregistrement du fichier du livre/magazine
-        //     using (var stream = new FileStream(filePath, FileMode.Create))
-        //     {
-        //         await model.File.CopyToAsync(stream);
-        //     }
-
-        //     // Enregistrement de l'image de couverture si elle est présente
-        //     // string coverImagePath = null;
-        //     // if (model.CoverImage != null && model.CoverImage.Length > 0)
-        //     // {
-        //     //     coverImagePath = Path.Combine("wwwroot/images/covers", model.CoverImage.FileName);
-        //     //     using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
-        //     //     {
-        //     //         await model.CoverImage.CopyToAsync(coverStream);
-        //     //     }
-        //     //     coverImagePath = $"/images/covers/{model.CoverImage.FileName}";
-        //     // }
-
-        //     // Enregistrement de l'image de couverture si elle est présente
-        //     string coverImagePath = null;
-        //     string originalCoverImageName = null;
-
-        //     if (model.CoverImage != null && model.CoverImage.Length > 0)
-        //     {
-        //         originalCoverImageName = model.CoverImage.FileName; // Stocker le nom original de l'image de couverture
-
-        //         // Générer un UUID unique pour l'image de couverture
-        //         string uuid;
-        //         do
-        //         {
-        //             uuid = Guid.NewGuid().ToString();
-        //         }
-        //         while (_context.CoverImageUuids.Any(u => u.Uuid == uuid));  // Vérifier si ce UUID existe déjà
-
-        //         // Enregistrer l'UUID dans la table pour garantir l'unicité
-        //         _context.CoverImageUuids.Add(new CoverImageUuid { Uuid = uuid });
-        //         await _context.SaveChangesAsync();
-
-        //         var coverImageExtension = Path.GetExtension(model.CoverImage.FileName);
-        //         var coverImageFileName = uuid + coverImageExtension;
-        //         coverImagePath = Path.Combine("wwwroot/images/covers", coverImageFileName);
-
-        //         // Sauvegarder l'image de couverture avec le nom UUID
-        //         using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
-        //         {
-        //             await model.CoverImage.CopyToAsync(coverStream);
-        //         }
-
-        //         // Stocker le chemin relatif dans la base de données
-        //         coverImagePath = $"/images/covers/{coverImageFileName}";
-        //     }
-
-        //     // Création de l'objet BookMagazine
-        //     var bookMagazine = new BookMagazine
-        //     {
-        //         Title = model.Title,
-        //         AuthorId = author.Id,  // Association avec l'auteur
-        //         CategoryId = category.Id,  // Association avec la catégorie
-        //         Description = model.Description,
-        //         Tags = model.Tags,
-        //         // FilePath = $"/files/{model.File.FileName}",
-        //         FilePath = $"/files/{uniqueFileName}",  // Chemin du fichier avec UUID
-        //         CoverImagePath = coverImagePath,
-        //         OriginalFileName = model.File.FileName,  // Stocker le nom de fichier original
-        //         OriginalCoverImageName = originalCoverImageName  // Nom original de l'image
-
-        //     };
-
-        //     // Enregistrement dans la base de données
-        //     _context.BooksMagazines.Add(bookMagazine);
-        //     await _context.SaveChangesAsync();
-
-        //     // Créer une notification pour les administrateurs
-        //     var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
-        //     var adminUsers = await _context.UserRoles
-        //         .Where(ur => ur.RoleId == adminRole.Id)
-        //         .Select(ur => ur.UserId)
-        //         .ToListAsync();
-
-        //     var notification = new Notification
-        //     {
-        //         Content = $"Un nouveau magazine a été ajouté par l'utilisateur {userId}",
-        //         CreatedAt = DateTime.Now,
-        //         IsRead = false
-        //     };
-
-        //     _context.Notifications.Add(notification);
-        //     await _context.SaveChangesAsync();
-
-        //     // Lier cette notification aux administrateurs uniquement
-        //     foreach (var adminId in adminUsers)
-        //     {
-        //         _context.UserNotifications.Add(new UserNotification
-        //         {
-        //             UserId = adminId,
-        //             NotificationId = notification.Id,
-        //             IsSent = false
-        //         });
-        //     }
-        //     await _context.SaveChangesAsync();
-
-
-        //     return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
-        // }
-
-        // *** Ajouter un livre ou magazine avec un auteur et une catégorie ***
-        [HttpPost("add")]
-        [Authorize]
-        public async Task<IActionResult> AddBookMagazine([FromForm] BookMagazineModel model)
+    // *** Ajouter un livre ou magazine avec un auteur et une catégorie ***
+    [HttpPost("add")]
+    [Authorize]
+    public async Task<IActionResult> AddBookMagazine([FromForm] BookMagazineModel model)
+    {
+        // ✅ Récupération de l'ID de l'utilisateur - vérification null
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null)
         {
-            // ✅ Récupération de l'ID de l'utilisateur - vérification null
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null)
-            {
-                return Unauthorized();
-            }
-
-            // ✅ Vérifier si l'auteur existe, sinon le créer - vérification null
-            var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
-            if (author == null)
-            {
-                author = new Author { Name = model.Author! }; // ✅ ! pour indiquer non-null
-                _context.Authors.Add(author);
-                await _context.SaveChangesAsync();
-            }
-
-            // ✅ Vérifier si la catégorie existe, sinon la créer - vérification null
-            var category = _context.Categories.FirstOrDefault(c => c.Name == model.Category);
-            if (category == null)
-            {
-                category = new Category { Name = model.Category! }; // ✅ ! pour indiquer non-null
-                _context.Categories.Add(category);
-                await _context.SaveChangesAsync();
-            }
-
-            // ✅ Générer un nom de fichier unique (UUID) - gestion extension null
-            string uniqueFileName;
-            do
-            {
-                uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File!.FileName)}"; // ✅ ! pour File
-            }
-            while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));  // Vérification de l'unicité
-
-            // Sauvegarder l'UUID dans la table FileUuids
-            var fileUuid = new FileUuid { Uuid = uniqueFileName };
-            _context.FileUuids.Add(fileUuid);
-            await _context.SaveChangesAsync();
-
-            var filePath = Path.Combine("wwwroot/files", uniqueFileName); // Enregistrement du fichier du livre/magazine
-            using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await model.File.CopyToAsync(stream);
-            }
-
-            // ✅ Enregistrement de l'image de couverture si elle est présente - nullable explicite
-            string? coverImagePath = null; // ✅ Explicitement nullable
-            string? originalCoverImageName = null; // ✅ Explicitement nullable
-
-            if (model.CoverImage != null && model.CoverImage.Length > 0)
-            {
-                originalCoverImageName = model.CoverImage.FileName; // Stocker le nom original de l'image de couverture
-
-                // Générer un UUID unique pour l'image de couverture
-                string uuid;
-                do
-                {
-                    uuid = Guid.NewGuid().ToString();
-                }
-                while (_context.CoverImageUuids.Any(u => u.Uuid == uuid));  // Vérifier si ce UUID existe déjà
-
-                // Enregistrer l'UUID dans la table pour garantir l'unicité
-                _context.CoverImageUuids.Add(new CoverImageUuid { Uuid = uuid });
-                await _context.SaveChangesAsync();
-
-                var coverImageExtension = Path.GetExtension(model.CoverImage.FileName);
-                var coverImageFileName = uuid + coverImageExtension;
-                coverImagePath = Path.Combine("wwwroot/images/covers", coverImageFileName);
-
-                // Sauvegarder l'image de couverture avec le nom UUID
-                using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
-                {
-                    await model.CoverImage.CopyToAsync(coverStream);
-                }
-
-                // Stocker le chemin relatif dans la base de données
-                coverImagePath = $"/images/covers/{coverImageFileName}";
-            }
-
-            // ✅ Création de l'objet BookMagazine - gestion des nulls
-            var bookMagazine = new BookMagazine
-            {
-                Title = model.Title!,  // ✅ ! pour indiquer non-null
-                AuthorId = author.Id,  // Association avec l'auteur
-                CategoryId = category.Id,  // Association avec la catégorie
-                Description = model.Description ?? string.Empty,  // ✅ ?? pour null
-                Tags = model.Tags ?? string.Empty,  // ✅ ?? pour null
-                FilePath = $"/files/{uniqueFileName}",  // Chemin du fichier avec UUID
-                CoverImagePath = coverImagePath ?? string.Empty,  // ✅ ?? pour null
-                OriginalFileName = model.File.FileName ?? string.Empty,  // ✅ ?? pour null
-                OriginalCoverImageName = originalCoverImageName ?? string.Empty  // ✅ ?? pour null
-            };
-
-            // Enregistrement dans la base de données
-            _context.BooksMagazines.Add(bookMagazine);
-            await _context.SaveChangesAsync();
-
-            // ✅ Créer une notification pour les administrateurs - vérification null
-            var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
-            if (adminRole != null)  // ✅ Vérification null
-            {
-                var adminUsers = await _context.UserRoles
-                    .Where(ur => ur.RoleId == adminRole.Id)
-                    .Select(ur => ur.UserId)
-                    .ToListAsync();
-
-                var notification = new Notification
-                {
-                    Content = $"Un nouveau magazine a été ajouté par l'utilisateur {userId}",
-                    CreatedAt = DateTime.Now,
-                    IsRead = false
-                };
-
-                _context.Notifications.Add(notification);
-                await _context.SaveChangesAsync();
-
-                // Lier cette notification aux administrateurs uniquement
-                foreach (var adminId in adminUsers)
-                {
-                    _context.UserNotifications.Add(new UserNotification
-                    {
-                        UserId = adminId,
-                        NotificationId = notification.Id,
-                        IsSent = false
-                    });
-                }
-                await _context.SaveChangesAsync();
-            }
-
-            return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
+            return Unauthorized();
         }
 
+        // ✅ Vérifier si l'auteur existe, sinon le créer - vérification null
+        var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
+        if (author == null)
+        {
+            author = new Author { Name = model.Author! }; // ✅ ! pour indiquer non-null
+            _context.Authors.Add(author);
+            await _context.SaveChangesAsync();
+        }
+
+        // ✅ Vérifier si la catégorie existe, sinon la créer - vérification null
+        var category = _context.Categories.FirstOrDefault(c => c.Name == model.Category);
+        if (category == null)
+        {
+            category = new Category { Name = model.Category! }; // ✅ ! pour indiquer non-null
+            _context.Categories.Add(category);
+            await _context.SaveChangesAsync();
+        }
+
+        // ✅ Générer un nom de fichier unique (UUID) - gestion extension null
+        string uniqueFileName;
+        do
+        {
+            uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File!.FileName)}"; // ✅ ! pour File
+        }
+        while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));  // Vérification de l'unicité
+
+        // Sauvegarder l'UUID dans la table FileUuids
+        var fileUuid = new FileUuid { Uuid = uniqueFileName };
+        _context.FileUuids.Add(fileUuid);
+        await _context.SaveChangesAsync();
+
+        var filePath = Path.Combine("wwwroot/files", uniqueFileName); // Enregistrement du fichier du livre/magazine
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await model.File.CopyToAsync(stream);
+        }
+
+        // ✅ Enregistrement de l'image de couverture si elle est présente - nullable explicite
+        string? coverImagePath = null; // ✅ Explicitement nullable
+        string? originalCoverImageName = null; // ✅ Explicitement nullable
+
+        if (model.CoverImage != null && model.CoverImage.Length > 0)
+        {
+            originalCoverImageName = model.CoverImage.FileName; // Stocker le nom original de l'image de couverture
+
+            // Générer un UUID unique pour l'image de couverture
+            string uuid;
+            do
+            {
+                uuid = Guid.NewGuid().ToString();
+            }
+            while (_context.CoverImageUuids.Any(u => u.Uuid == uuid));  // Vérifier si ce UUID existe déjà
+
+            // Enregistrer l'UUID dans la table pour garantir l'unicité
+            _context.CoverImageUuids.Add(new CoverImageUuid { Uuid = uuid });
+            await _context.SaveChangesAsync();
+
+            var coverImageExtension = Path.GetExtension(model.CoverImage.FileName);
+            var coverImageFileName = uuid + coverImageExtension;
+            coverImagePath = Path.Combine("wwwroot/images/covers", coverImageFileName);
+
+            // Sauvegarder l'image de couverture avec le nom UUID
+            using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
+            {
+                await model.CoverImage.CopyToAsync(coverStream);
+            }
+
+            // Stocker le chemin relatif dans la base de données
+            coverImagePath = $"/images/covers/{coverImageFileName}";
+        }
+
+        // ✅ Création de l'objet BookMagazine - gestion des nulls
+        var bookMagazine = new BookMagazine
+        {
+            Title = model.Title!,  // ✅ ! pour indiquer non-null
+            AuthorId = author.Id,  // Association avec l'auteur
+            CategoryId = category.Id,  // Association avec la catégorie
+            Description = model.Description ?? string.Empty,  // ✅ ?? pour null
+            Tags = model.Tags ?? string.Empty,  // ✅ ?? pour null
+            FilePath = $"/files/{uniqueFileName}",  // Chemin du fichier avec UUID
+            CoverImagePath = coverImagePath ?? string.Empty,  // ✅ ?? pour null
+            OriginalFileName = model.File.FileName ?? string.Empty,  // ✅ ?? pour null
+            OriginalCoverImageName = originalCoverImageName ?? string.Empty  // ✅ ?? pour null
+        };
+
+        // Enregistrement dans la base de données
+        _context.BooksMagazines.Add(bookMagazine);
+        await _context.SaveChangesAsync();
+
+        // ✅ Créer une notification pour les administrateurs - vérification null
+        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+        if (adminRole != null)  // ✅ Vérification null
+        {
+            var adminUsers = await _context.UserRoles
+                .Where(ur => ur.RoleId == adminRole.Id)
+                .Select(ur => ur.UserId)
+                .ToListAsync();
+
+            var notification = new Notification
+            {
+                
+                Subject ="📚 Nouveau livre ajouté à la bibliothèque",
+                // Content = $"Un nouveau magazine a été ajouté par l'utilisateur {userId}",
+                // Content au format HTML
+                Content = $@"
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; }}
+                        .container {{ max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; }}
+                        .header {{ text-align: center; color: #333; margin-bottom: 30px; }}
+                        .book-info {{ background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+                        .footer {{ text-align: center; color: #666; font-size: 14px; margin-top: 30px; }}
+                        .btn {{ display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; }}
+                    </style>
+                </head>
+                <body>
+                    <div class='container'>
+                        <div class='header'>
+                            <h1>📚 Nouveau livre ajouté !</h1>
+                        </div>
+
+                        <p>Bonjour Administrateur,</p>
+
+                        <p>Un nouveau livre vient d'être ajouté à la bibliothèque numérique :</p>
+
+                        <div class='book-info'>
+                            <h3>📖 {bookMagazine.Title}</h3>
+                            <p><strong>Auteur :</strong> {bookMagazine.Author.Name}</p>
+                            <p><strong>Date d'ajout :</strong> {DateTime.Now:dd/MM/yyyy à HH:mm}</p>
+                        </div>
+
+                        <p>Vous pouvez consulter ce livre et le modérer si nécessaire via votre dashboard administrateur.</p>
+
+                        <p>Le nouveau livre a été ajouté par l'utilisateur {userId}</p>
+
+                        <div class='footer'>
+                            <p>📧 Ceci est un email automatique de votre Library API</p>
+                        </div>
+                    </div>
+                </body>
+                </html>",
+                
+                CreatedAt = DateTime.Now,
+                IsRead = false
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Lier cette notification aux administrateurs uniquement
+            foreach (var adminId in adminUsers)
+            {
+                // Récupérer le nom de l'admin
+                var admin = await _context.Users.FirstOrDefaultAsync(u => u.Id == adminId);
+                var adminName = admin?.UserName ?? "Administrateur";
+
+                _context.UserNotifications.Add(new UserNotification
+                {
+                    UserId = adminId,
+                    NotificationId = notification.Id,
+                    IsSent = false
+                });
+    
+            }
+            await _context.SaveChangesAsync();
+
+        }
+
+        return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
+    }
+
+
     // *** Obtenir la liste des livres ou magazines ***
-        [HttpGet("list")]
+    [HttpGet("list")]
     public IActionResult GetBooksMagazines()
     {
         var booksMagazines = _context.BooksMagazines
@@ -527,17 +429,7 @@ public class BookMagazineController : ControllerBase
         }
         bookMagazine.CategoryId = category.Id;
 
-        // Gestion du fichier (facultatif)
-        // if (model.File != null)
-        // {
-        //     var filePath = Path.Combine("wwwroot/files", model.File.FileName);
-        //     using (var stream = new FileStream(filePath, FileMode.Create))
-        //     {
-        //         await model.File.CopyToAsync(stream);
-        //     }
-        //     bookMagazine.FilePath = $"/files/{model.File.FileName}";
-        // }
-
+ 
         if (model.File != null)
         {
             // Supprimer l'ancien fichier du serveur

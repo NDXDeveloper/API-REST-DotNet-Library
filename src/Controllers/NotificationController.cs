@@ -72,7 +72,7 @@ public class NotificationController : ControllerBase
                 if (notification != null)
                 {
                     //await _emailService.SendEmailAsync(user.Email, "New Notification", notification.Content);
-                    await _emailService.SendEmailAsync(user.Email, "New Notification", notification.Content ?? "");
+                    await _emailService.SendEmailAsync(user.Email, string.IsNullOrEmpty(notification.Subject) ? "Nouvelle Notification" : notification.Subject, notification.Content ?? "");
                     userNotification.IsSent = true;
                 }
             }
@@ -82,8 +82,9 @@ public class NotificationController : ControllerBase
         return Ok("Emails sent successfully.");
     }
 
+
     // *** Marquer une notification comme lue ***
-    [HttpPost("mark-as-read/{notificationId}")]
+        [HttpPost("mark-as-read/{notificationId}")]
     [Authorize]
     public async Task<IActionResult> MarkAsRead(int notificationId)
     {

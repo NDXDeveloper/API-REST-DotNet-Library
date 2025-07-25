@@ -10,6 +10,7 @@ namespace LibraryAPI.Models
         public int Id { get; set; }
 
         [Required]
+        public string? Subject { get; set; } = "New Notification"; // Objet de la notification
         public string? Content { get; set; } // Message de la notification
 
         public DateTime CreatedAt { get; set; } = DateTime.Now; // Date de création
