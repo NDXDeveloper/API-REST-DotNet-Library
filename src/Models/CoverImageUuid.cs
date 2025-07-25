@@ -10,7 +10,7 @@ namespace LibraryAPI.Models
 
         [Required]
         [StringLength(36)]  // Longueur d'un UUID standard
-        public string Uuid { get; set; }
+        public string Uuid { get; set; } = string.Empty;
     }
     
 }

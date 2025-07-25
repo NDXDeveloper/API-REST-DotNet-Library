@@ -13,19 +13,19 @@ namespace LibraryAPI.Models
         public int BookMagazineId { get; set; }
 
         [Required]
-        public string UserId { get; set; }  // ID de l'utilisateur qui a laissé le commentaire
+        public string UserId { get; set; }  = string.Empty;  // ID de l'utilisateur qui a laissé le commentaire
 
         [Required]
-        public string Content { get; set; }  // Contenu du commentaire
+        public string Content { get; set; }  = string.Empty;  // Contenu du commentaire
 
         public DateTime CommentDate { get; set; } = DateTime.Now;  // Date du commentaire
 
         public int? ParentCommentId { get; set; }  // ID du commentaire parent (si c'est une réponse)
 
         // Relations avec BookMagazine, ApplicationUser et le commentaire parent
-        public BookMagazine BookMagazine { get; set; }
-        public ApplicationUser User { get; set; }
-        public Comment ParentComment { get; set; }
+        public BookMagazine BookMagazine { get; set; } = null!;
+        public ApplicationUser User { get; set; } = null!;
+        public Comment ParentComment { get; set; } = null!;
     }
     
 }

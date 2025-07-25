@@ -22,156 +22,292 @@ public class BookMagazineController : ControllerBase
         _context = context;
     }
 
-    // *** Ajouter un livre ou magazine avec un auteur et une catégorie ***
-    [HttpPost("add")]
-    [Authorize]
-    public async Task<IActionResult> AddBookMagazine([FromForm] BookMagazineModel model)
-    {
-        // Récupération de l'ID de l'utilisateur
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        // Vérifier si l'auteur existe, sinon le créer
-        var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
-        if (author == null)
-        {
-            author = new Author { Name = model.Author };
-            _context.Authors.Add(author);
-            await _context.SaveChangesAsync();
-        }
-
-        // Vérifier si la catégorie existe, sinon la créer
-        var category = _context.Categories.FirstOrDefault(c => c.Name == model.Category);
-        if (category == null)
-        {
-            category = new Category { Name = model.Category };
-            _context.Categories.Add(category);
-            await _context.SaveChangesAsync();
-        }
-
-        // Enregistrement du fichier du livre/magazine
-        // var filePath = Path.Combine("wwwroot/files", model.File.FileName);
-        // Générer un nom de fichier unique (UUID)
-        //var uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";  // Conserver l'extension originale
-        // Générer un nom de fichier unique (UUID)
-        string uniqueFileName;
-        do
-        {
-            uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";
-        }
-        while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));  // Vérification de l'unicité
-
-        // Sauvegarder l'UUID dans la table FileUuids
-        var fileUuid = new FileUuid { Uuid = uniqueFileName };
-        _context.FileUuids.Add(fileUuid);
-        await _context.SaveChangesAsync();
-        
-        var filePath = Path.Combine("wwwroot/files", uniqueFileName); // Enregistrement du fichier du livre/magazine
-        using (var stream = new FileStream(filePath, FileMode.Create))
-        {
-            await model.File.CopyToAsync(stream);
-        }
-
-        // Enregistrement de l'image de couverture si elle est présente
-        // string coverImagePath = null;
-        // if (model.CoverImage != null && model.CoverImage.Length > 0)
+        // // *** Ajouter un livre ou magazine avec un auteur et une catégorie ***
+        // [HttpPost("add")]
+        // [Authorize]
+        // public async Task<IActionResult> AddBookMagazine([FromForm] BookMagazineModel model)
         // {
-        //     coverImagePath = Path.Combine("wwwroot/images/covers", model.CoverImage.FileName);
-        //     using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
+        //     // Récupération de l'ID de l'utilisateur
+        //     var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        //     // Vérifier si l'auteur existe, sinon le créer
+        //     var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
+        //     if (author == null)
         //     {
-        //         await model.CoverImage.CopyToAsync(coverStream);
+        //         author = new Author { Name = model.Author };
+        //         _context.Authors.Add(author);
+        //         await _context.SaveChangesAsync();
         //     }
-        //     coverImagePath = $"/images/covers/{model.CoverImage.FileName}";
+
+        //     // Vérifier si la catégorie existe, sinon la créer
+        //     var category = _context.Categories.FirstOrDefault(c => c.Name == model.Category);
+        //     if (category == null)
+        //     {
+        //         category = new Category { Name = model.Category };
+        //         _context.Categories.Add(category);
+        //         await _context.SaveChangesAsync();
+        //     }
+
+        //     // Enregistrement du fichier du livre/magazine
+        //     // var filePath = Path.Combine("wwwroot/files", model.File.FileName);
+        //     // Générer un nom de fichier unique (UUID)
+        //     //var uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";  // Conserver l'extension originale
+        //     // Générer un nom de fichier unique (UUID)
+        //     string uniqueFileName;
+        //     do
+        //     {
+        //         uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File.FileName)}";
+        //     }
+        //     while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));  // Vérification de l'unicité
+
+        //     // Sauvegarder l'UUID dans la table FileUuids
+        //     var fileUuid = new FileUuid { Uuid = uniqueFileName };
+        //     _context.FileUuids.Add(fileUuid);
+        //     await _context.SaveChangesAsync();
+
+        //     var filePath = Path.Combine("wwwroot/files", uniqueFileName); // Enregistrement du fichier du livre/magazine
+        //     using (var stream = new FileStream(filePath, FileMode.Create))
+        //     {
+        //         await model.File.CopyToAsync(stream);
+        //     }
+
+        //     // Enregistrement de l'image de couverture si elle est présente
+        //     // string coverImagePath = null;
+        //     // if (model.CoverImage != null && model.CoverImage.Length > 0)
+        //     // {
+        //     //     coverImagePath = Path.Combine("wwwroot/images/covers", model.CoverImage.FileName);
+        //     //     using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
+        //     //     {
+        //     //         await model.CoverImage.CopyToAsync(coverStream);
+        //     //     }
+        //     //     coverImagePath = $"/images/covers/{model.CoverImage.FileName}";
+        //     // }
+
+        //     // Enregistrement de l'image de couverture si elle est présente
+        //     string coverImagePath = null;
+        //     string originalCoverImageName = null;
+
+        //     if (model.CoverImage != null && model.CoverImage.Length > 0)
+        //     {
+        //         originalCoverImageName = model.CoverImage.FileName; // Stocker le nom original de l'image de couverture
+
+        //         // Générer un UUID unique pour l'image de couverture
+        //         string uuid;
+        //         do
+        //         {
+        //             uuid = Guid.NewGuid().ToString();
+        //         }
+        //         while (_context.CoverImageUuids.Any(u => u.Uuid == uuid));  // Vérifier si ce UUID existe déjà
+
+        //         // Enregistrer l'UUID dans la table pour garantir l'unicité
+        //         _context.CoverImageUuids.Add(new CoverImageUuid { Uuid = uuid });
+        //         await _context.SaveChangesAsync();
+
+        //         var coverImageExtension = Path.GetExtension(model.CoverImage.FileName);
+        //         var coverImageFileName = uuid + coverImageExtension;
+        //         coverImagePath = Path.Combine("wwwroot/images/covers", coverImageFileName);
+
+        //         // Sauvegarder l'image de couverture avec le nom UUID
+        //         using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
+        //         {
+        //             await model.CoverImage.CopyToAsync(coverStream);
+        //         }
+
+        //         // Stocker le chemin relatif dans la base de données
+        //         coverImagePath = $"/images/covers/{coverImageFileName}";
+        //     }
+
+        //     // Création de l'objet BookMagazine
+        //     var bookMagazine = new BookMagazine
+        //     {
+        //         Title = model.Title,
+        //         AuthorId = author.Id,  // Association avec l'auteur
+        //         CategoryId = category.Id,  // Association avec la catégorie
+        //         Description = model.Description,
+        //         Tags = model.Tags,
+        //         // FilePath = $"/files/{model.File.FileName}",
+        //         FilePath = $"/files/{uniqueFileName}",  // Chemin du fichier avec UUID
+        //         CoverImagePath = coverImagePath,
+        //         OriginalFileName = model.File.FileName,  // Stocker le nom de fichier original
+        //         OriginalCoverImageName = originalCoverImageName  // Nom original de l'image
+
+        //     };
+
+        //     // Enregistrement dans la base de données
+        //     _context.BooksMagazines.Add(bookMagazine);
+        //     await _context.SaveChangesAsync();
+
+        //     // Créer une notification pour les administrateurs
+        //     var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+        //     var adminUsers = await _context.UserRoles
+        //         .Where(ur => ur.RoleId == adminRole.Id)
+        //         .Select(ur => ur.UserId)
+        //         .ToListAsync();
+
+        //     var notification = new Notification
+        //     {
+        //         Content = $"Un nouveau magazine a été ajouté par l'utilisateur {userId}",
+        //         CreatedAt = DateTime.Now,
+        //         IsRead = false
+        //     };
+
+        //     _context.Notifications.Add(notification);
+        //     await _context.SaveChangesAsync();
+
+        //     // Lier cette notification aux administrateurs uniquement
+        //     foreach (var adminId in adminUsers)
+        //     {
+        //         _context.UserNotifications.Add(new UserNotification
+        //         {
+        //             UserId = adminId,
+        //             NotificationId = notification.Id,
+        //             IsSent = false
+        //         });
+        //     }
+        //     await _context.SaveChangesAsync();
+
+
+        //     return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
         // }
 
-        // Enregistrement de l'image de couverture si elle est présente
-        string coverImagePath = null;
-        string originalCoverImageName = null;
-        
-        if (model.CoverImage != null && model.CoverImage.Length > 0)
+        // *** Ajouter un livre ou magazine avec un auteur et une catégorie ***
+        [HttpPost("add")]
+        [Authorize]
+        public async Task<IActionResult> AddBookMagazine([FromForm] BookMagazineModel model)
         {
-            originalCoverImageName = model.CoverImage.FileName; // Stocker le nom original de l'image de couverture
+            // ✅ Récupération de l'ID de l'utilisateur - vérification null
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
 
-            // Générer un UUID unique pour l'image de couverture
-            string uuid;
+            // ✅ Vérifier si l'auteur existe, sinon le créer - vérification null
+            var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
+            if (author == null)
+            {
+                author = new Author { Name = model.Author! }; // ✅ ! pour indiquer non-null
+                _context.Authors.Add(author);
+                await _context.SaveChangesAsync();
+            }
+
+            // ✅ Vérifier si la catégorie existe, sinon la créer - vérification null
+            var category = _context.Categories.FirstOrDefault(c => c.Name == model.Category);
+            if (category == null)
+            {
+                category = new Category { Name = model.Category! }; // ✅ ! pour indiquer non-null
+                _context.Categories.Add(category);
+                await _context.SaveChangesAsync();
+            }
+
+            // ✅ Générer un nom de fichier unique (UUID) - gestion extension null
+            string uniqueFileName;
             do
             {
-                uuid = Guid.NewGuid().ToString();
+                uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(model.File!.FileName)}"; // ✅ ! pour File
             }
-            while (_context.CoverImageUuids.Any(u => u.Uuid == uuid));  // Vérifier si ce UUID existe déjà
+            while (_context.FileUuids.Any(f => f.Uuid == uniqueFileName));  // Vérification de l'unicité
 
-            // Enregistrer l'UUID dans la table pour garantir l'unicité
-            _context.CoverImageUuids.Add(new CoverImageUuid { Uuid = uuid });
+            // Sauvegarder l'UUID dans la table FileUuids
+            var fileUuid = new FileUuid { Uuid = uniqueFileName };
+            _context.FileUuids.Add(fileUuid);
             await _context.SaveChangesAsync();
 
-            var coverImageExtension = Path.GetExtension(model.CoverImage.FileName);
-            var coverImageFileName = uuid + coverImageExtension;
-            coverImagePath = Path.Combine("wwwroot/images/covers", coverImageFileName);
-
-            // Sauvegarder l'image de couverture avec le nom UUID
-            using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
+            var filePath = Path.Combine("wwwroot/files", uniqueFileName); // Enregistrement du fichier du livre/magazine
+            using (var stream = new FileStream(filePath, FileMode.Create))
             {
-                await model.CoverImage.CopyToAsync(coverStream);
+                await model.File.CopyToAsync(stream);
             }
 
-            // Stocker le chemin relatif dans la base de données
-            coverImagePath = $"/images/covers/{coverImageFileName}";
-        }
+            // ✅ Enregistrement de l'image de couverture si elle est présente - nullable explicite
+            string? coverImagePath = null; // ✅ Explicitement nullable
+            string? originalCoverImageName = null; // ✅ Explicitement nullable
 
-        // Création de l'objet BookMagazine
-        var bookMagazine = new BookMagazine
-        {
-            Title = model.Title,
-            AuthorId = author.Id,  // Association avec l'auteur
-            CategoryId = category.Id,  // Association avec la catégorie
-            Description = model.Description,
-            Tags = model.Tags,
-            // FilePath = $"/files/{model.File.FileName}",
-            FilePath = $"/files/{uniqueFileName}",  // Chemin du fichier avec UUID
-            CoverImagePath = coverImagePath,
-            OriginalFileName = model.File.FileName,  // Stocker le nom de fichier original
-            OriginalCoverImageName = originalCoverImageName  // Nom original de l'image
-    
-        };
-
-        // Enregistrement dans la base de données
-        _context.BooksMagazines.Add(bookMagazine);
-        await _context.SaveChangesAsync();
-
-        // Créer une notification pour les administrateurs
-        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
-        var adminUsers = await _context.UserRoles
-            .Where(ur => ur.RoleId == adminRole.Id)
-            .Select(ur => ur.UserId)
-            .ToListAsync();
-
-        var notification = new Notification
-        {
-            Content = $"Un nouveau magazine a été ajouté par l'utilisateur {userId}",
-            CreatedAt = DateTime.Now,
-            IsRead = false
-        };
-
-        _context.Notifications.Add(notification);
-        await _context.SaveChangesAsync();
-
-        // Lier cette notification aux administrateurs uniquement
-        foreach (var adminId in adminUsers)
-        {
-            _context.UserNotifications.Add(new UserNotification
+            if (model.CoverImage != null && model.CoverImage.Length > 0)
             {
-                UserId = adminId,
-                NotificationId = notification.Id,
-                IsSent = false
-            });
+                originalCoverImageName = model.CoverImage.FileName; // Stocker le nom original de l'image de couverture
+
+                // Générer un UUID unique pour l'image de couverture
+                string uuid;
+                do
+                {
+                    uuid = Guid.NewGuid().ToString();
+                }
+                while (_context.CoverImageUuids.Any(u => u.Uuid == uuid));  // Vérifier si ce UUID existe déjà
+
+                // Enregistrer l'UUID dans la table pour garantir l'unicité
+                _context.CoverImageUuids.Add(new CoverImageUuid { Uuid = uuid });
+                await _context.SaveChangesAsync();
+
+                var coverImageExtension = Path.GetExtension(model.CoverImage.FileName);
+                var coverImageFileName = uuid + coverImageExtension;
+                coverImagePath = Path.Combine("wwwroot/images/covers", coverImageFileName);
+
+                // Sauvegarder l'image de couverture avec le nom UUID
+                using (var coverStream = new FileStream(coverImagePath, FileMode.Create))
+                {
+                    await model.CoverImage.CopyToAsync(coverStream);
+                }
+
+                // Stocker le chemin relatif dans la base de données
+                coverImagePath = $"/images/covers/{coverImageFileName}";
+            }
+
+            // ✅ Création de l'objet BookMagazine - gestion des nulls
+            var bookMagazine = new BookMagazine
+            {
+                Title = model.Title!,  // ✅ ! pour indiquer non-null
+                AuthorId = author.Id,  // Association avec l'auteur
+                CategoryId = category.Id,  // Association avec la catégorie
+                Description = model.Description ?? string.Empty,  // ✅ ?? pour null
+                Tags = model.Tags ?? string.Empty,  // ✅ ?? pour null
+                FilePath = $"/files/{uniqueFileName}",  // Chemin du fichier avec UUID
+                CoverImagePath = coverImagePath ?? string.Empty,  // ✅ ?? pour null
+                OriginalFileName = model.File.FileName ?? string.Empty,  // ✅ ?? pour null
+                OriginalCoverImageName = originalCoverImageName ?? string.Empty  // ✅ ?? pour null
+            };
+
+            // Enregistrement dans la base de données
+            _context.BooksMagazines.Add(bookMagazine);
+            await _context.SaveChangesAsync();
+
+            // ✅ Créer une notification pour les administrateurs - vérification null
+            var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+            if (adminRole != null)  // ✅ Vérification null
+            {
+                var adminUsers = await _context.UserRoles
+                    .Where(ur => ur.RoleId == adminRole.Id)
+                    .Select(ur => ur.UserId)
+                    .ToListAsync();
+
+                var notification = new Notification
+                {
+                    Content = $"Un nouveau magazine a été ajouté par l'utilisateur {userId}",
+                    CreatedAt = DateTime.Now,
+                    IsRead = false
+                };
+
+                _context.Notifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                // Lier cette notification aux administrateurs uniquement
+                foreach (var adminId in adminUsers)
+                {
+                    _context.UserNotifications.Add(new UserNotification
+                    {
+                        UserId = adminId,
+                        NotificationId = notification.Id,
+                        IsSent = false
+                    });
+                }
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
         }
-        await _context.SaveChangesAsync();
-
-
-        return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
-    }
 
     // *** Obtenir la liste des livres ou magazines ***
-    [HttpGet("list")]
+        [HttpGet("list")]
     public IActionResult GetBooksMagazines()
     {
         var booksMagazines = _context.BooksMagazines
@@ -233,78 +369,84 @@ public class BookMagazineController : ControllerBase
     }
 
 
-    //*** Obtenir les détails d'un livre ou magazine spécifique ***
-    // [HttpGet("{id}")]
-    // public IActionResult GetBookMagazine(int id)
-    // {
-    //     var bookMagazine = _context.BooksMagazines
-    //         .Where(b => b.Id == id)
-    //         .Select(b => new 
-    //         {
-    //             b.Id,
-    //             b.Title,
-    //             b.Description,
-    //             Author = b.Author.Name,
-    //             Category = b.Category.Name,
-    //             b.Tags,
-    //             b.CoverImagePath,
-    //             b.FilePath,
-    //             b.UploadDate
-    //         })
-    //         .FirstOrDefault();
+        //*** Obtenir les détails d'un livre ou magazine spécifique ***
+        // [HttpGet("{id}")]
+        // public IActionResult GetBookMagazine(int id)
+        // {
+        //     var bookMagazine = _context.BooksMagazines
+        //         .Where(b => b.Id == id)
+        //         .Select(b => new 
+        //         {
+        //             b.Id,
+        //             b.Title,
+        //             b.Description,
+        //             Author = b.Author.Name,
+        //             Category = b.Category.Name,
+        //             b.Tags,
+        //             b.CoverImagePath,
+        //             b.FilePath,
+        //             b.UploadDate
+        //         })
+        //         .FirstOrDefault();
 
-    //     if (bookMagazine == null)
-    //         return NotFound();
+        //     if (bookMagazine == null)
+        //         return NotFound();
 
-    //     return Ok(bookMagazine);        
-    // }
+        //     return Ok(bookMagazine);        
+        // }
 
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetBookMagazine(int id)
-    {
-        var bookMagazine = await _context.BooksMagazines
-                .Include(b => b.Author)       // Inclure l'entité 'Author'
-                .Include(b => b.Category)     // Inclure l'entité 'Category'
-            .FirstOrDefaultAsync(b => b.Id == id);
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetBookMagazine(int id)
+        {
+            var bookMagazine = await _context.BooksMagazines
+                .Include(b => b.Author)
+                .Include(b => b.Category)
+                .FirstOrDefaultAsync(b => b.Id == id);
 
-        if (bookMagazine == null)
-            return NotFound();
+            if (bookMagazine == null)
+                return NotFound("Book or magazine not found");
 
-        // Vérifier que l'entité 'Author' et 'Category' ne sont pas nulles
-        if (bookMagazine.Author == null || bookMagazine.Category == null)
-            return StatusCode(500, "Invalid data: Author or Category not found.");  // Gérer les cas de données incorrectes
+            // Vérifications de sécurité pour les propriétés de navigation
+            if (bookMagazine.Author == null)
+            {
+                return StatusCode(500, "Data integrity error: Author information missing");
+            }
 
+            if (bookMagazine.Category == null)
+            {
+                return StatusCode(500, "Data integrity error: Category information missing");
+            }
 
-        // Incrémenter le compteur de vues
-        bookMagazine.ViewCount++;
-        _context.BooksMagazines.Update(bookMagazine);
-        await _context.SaveChangesAsync();
+            // Incrémenter le compteur de vues de manière sécurisée
+            bookMagazine.ViewCount++;
+            _context.BooksMagazines.Update(bookMagazine);
+            await _context.SaveChangesAsync();
 
-        // Calculer la note moyenne et le nombre de commentaires
-        var averageRating = await _context.Ratings
-            .Where(r => r.BookMagazineId == id)
-            .AverageAsync(r => (double?)r.RatingValue) ?? 0;
+            // Calculs sécurisés
+            var averageRating = await _context.Ratings
+                .Where(r => r.BookMagazineId == id)
+                .AverageAsync(r => (double?)r.RatingValue) ?? 0.0;
 
-        var commentCount = await _context.Comments
-            .CountAsync(c => c.BookMagazineId == id);
+            var commentCount = await _context.Comments
+                .CountAsync(c => c.BookMagazineId == id);
 
-        return Ok(new {
-            bookMagazine.Id,
-            bookMagazine.Title,
-            bookMagazine.Description,
-            Author = bookMagazine.Author.Name,
-            Category = bookMagazine.Category.Name,
-            bookMagazine.Tags,
-            bookMagazine.CoverImagePath,
-            bookMagazine.FilePath,
-            bookMagazine.UploadDate,
-            bookMagazine.ViewCount, // Renvoyer le nombre de vues
-            bookMagazine.DownloadCount,   // Renvoyer le nombre de téléchargements
-            AverageRating = averageRating,  // Renvoyer la note moyenne
-            CommentCount = commentCount     // Renvoyer le nombre de commentaires
-    
-        });
-    }
+            return Ok(new
+            {
+                bookMagazine.Id,
+                bookMagazine.Title,
+                bookMagazine.Description,
+                Author = bookMagazine.Author.Name,
+                Category = bookMagazine.Category.Name,
+                bookMagazine.Tags,
+                bookMagazine.CoverImagePath,
+                bookMagazine.FilePath,
+                bookMagazine.UploadDate,
+                bookMagazine.ViewCount,
+                bookMagazine.DownloadCount,
+                AverageRating = averageRating,
+                CommentCount = commentCount
+            });
+        }
 
 
     // // *** Télécharger le fichier d'un livre ou magazine ***
@@ -359,25 +501,27 @@ public class BookMagazineController : ControllerBase
         var bookMagazine = _context.BooksMagazines.FirstOrDefault(b => b.Id == id);
         if (bookMagazine == null) return NotFound();
 
-        // Mise à jour des propriétés du livre/magazine
-        bookMagazine.Title = model.Title;
-        bookMagazine.Description = model.Description;
-        bookMagazine.Tags = model.Tags;
+            // Mise à jour des propriétés du livre/magazine
+            bookMagazine.Title = model.Title ?? string.Empty;
+            bookMagazine.Description = model.Description ?? string.Empty;
+            bookMagazine.Tags = model.Tags ?? string.Empty;
 
         // Gestion de l'auteur et de la catégorie
-        var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);
+            var author = _context.Authors.FirstOrDefault(a => a.Name == model.Author);            
         if (author == null)
-        {
-            author = new Author { Name = model.Author };
-            _context.Authors.Add(author);
-            await _context.SaveChangesAsync();
-        }
+            {
+                author = new Author { Name = model.Author! };
+                _context.Authors.Add(author);
+                await _context.SaveChangesAsync();
+            }     
+
+
         bookMagazine.AuthorId = author.Id;
 
         var category = _context.Categories.FirstOrDefault(c => c.Name == model.Category);
         if (category == null)
         {
-            category = new Category { Name = model.Category };
+            category = new Category { Name = model.Category! };
             _context.Categories.Add(category);
             await _context.SaveChangesAsync();
         }
@@ -798,9 +942,13 @@ public IActionResult SearchBooksMagazinesPaged([FromQuery] string keyword, [From
     public IActionResult GetSuggestions()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
 
         // Obtenez les catégories des livres déjà lus par l'utilisateur
-        var categories = _context.UserReadingHistory
+            var categories = _context.UserReadingHistory
             .Where(ur => ur.UserId == userId)
             .Select(ur => ur.BookMagazine.CategoryId)
             .Distinct()
@@ -858,6 +1006,10 @@ public IActionResult SearchBooksMagazinesPaged([FromQuery] string keyword, [From
     public async Task<IActionResult> RateBookMagazine(int bookMagazineId, [FromBody] int ratingValue)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
 
         // Vérifier que l'utilisateur a bien lu le livre
         var hasRead = _context.UserReadingHistory
@@ -895,9 +1047,12 @@ public IActionResult SearchBooksMagazinesPaged([FromQuery] string keyword, [From
             .Average(r => r.RatingValue);
 
         var bookMagazine = _context.BooksMagazines.FirstOrDefault(b => b.Id == bookMagazineId);
-        bookMagazine.AverageRating = averageRating;
-        _context.BooksMagazines.Update(bookMagazine);
-        await _context.SaveChangesAsync();
+            if (bookMagazine != null)
+            {
+                bookMagazine.AverageRating = averageRating;
+                _context.BooksMagazines.Update(bookMagazine);
+                await _context.SaveChangesAsync();
+            }
 
         return Ok(new { Message = "Rating submitted successfully", AverageRating = averageRating });
     }
@@ -924,6 +1079,10 @@ public IActionResult SearchBooksMagazinesPaged([FromQuery] string keyword, [From
     public async Task<IActionResult> AddComment(int bookMagazineId, [FromBody] string content)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
 
         // Vérifier que l'utilisateur a bien lu le livre avant de pouvoir commenter
         var hasRead = _context.UserReadingHistory
@@ -983,6 +1142,10 @@ public IActionResult SearchBooksMagazinesPaged([FromQuery] string keyword, [From
     public async Task<IActionResult> ReplyToComment(int bookMagazineId, int commentId, [FromBody] string content)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
 
         // Vérifier que l'utilisateur a bien lu le livre avant de pouvoir répondre à un commentaire
         var hasRead = _context.UserReadingHistory

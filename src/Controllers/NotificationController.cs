@@ -71,7 +71,8 @@ public class NotificationController : ControllerBase
                 var notification = _context.Notifications.FirstOrDefault(n => n.Id == userNotification.NotificationId);
                 if (notification != null)
                 {
-                    await _emailService.SendEmailAsync(user.Email, "New Notification", notification.Content);
+                    //await _emailService.SendEmailAsync(user.Email, "New Notification", notification.Content);
+                    await _emailService.SendEmailAsync(user.Email, "New Notification", notification.Content ?? "");
                     userNotification.IsSent = true;
                 }
             }
