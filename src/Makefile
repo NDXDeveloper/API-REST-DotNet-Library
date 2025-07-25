@@ -243,19 +243,19 @@ clean:
 run-dev:
 	@echo "$(GREEN)🚀 Lancement en mode développement...$(NC)"
 	@echo "$(YELLOW)URL: http://localhost:5000 | https://localhost:5001$(NC)"
-	ASPNETCORE_ENVIRONMENT=Development dotnet run --project $(PROJECT_FILE) --urls="http://localhost:5000;https://localhost:5001"
+	ASPNETCORE_ENVIRONMENT=Development dotnet run --project $(PROJECT_FILE) --no-build --urls="http://localhost:5000;https://localhost:5001"
 
 # Lancement production
 run-prod:
 	@echo "$(GREEN)🚀 Lancement en mode production...$(NC)"
 	@echo "$(YELLOW)URL: http://localhost:5000 | https://localhost:5001$(NC)"
-	ASPNETCORE_ENVIRONMENT=Production dotnet run --project $(PROJECT_FILE) --urls="http://localhost:5000;https://localhost:5001"
+	ASPNETCORE_ENVIRONMENT=Production dotnet run --project $(PROJECT_FILE) --no-build --urls="http://localhost:5000;https://localhost:5001"
 
 # Lancement Railway (simulation)
 run-railway:
 	@echo "$(GREEN)🚀 Lancement en mode Railway...$(NC)"
 	@echo "$(YELLOW)URL: http://localhost:8080$(NC)"
-	ASPNETCORE_ENVIRONMENT=ProductionRailway dotnet run --project $(PROJECT_FILE) --urls="http://localhost:8080"
+	ASPNETCORE_ENVIRONMENT=ProductionRailway dotnet run --project $(PROJECT_FILE) --no-build --urls="http://localhost:8080"
 
 # Configuration développement complète
 dev-setup: ef-install ssl-dev install build
