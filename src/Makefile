@@ -239,17 +239,24 @@ clean:
 	rm -rf bin obj
 	@echo "$(GREEN)✅ Nettoyage terminé$(NC)"
 
-# Lancement développement
-run-dev:
-	@echo "$(GREEN)🚀 Lancement en mode développement...$(NC)"
-	@echo "$(YELLOW)URL: http://localhost:5000 | https://localhost:5001$(NC)"
-	ASPNETCORE_ENVIRONMENT=Development dotnet run --project $(PROJECT_FILE) --no-build --urls="http://localhost:5000;https://localhost:5001"
 
-# Lancement production
-run-prod:
-	@echo "$(GREEN)🚀 Lancement en mode production...$(NC)"
+# Cible interne (privée) pour lancer l'application.
+# L'environnement est passé via une variable ENV.
+_run: build
+	@echo "$(GREEN)🚀 Lancement en mode $(ENV)...$(NC)"
 	@echo "$(YELLOW)URL: http://localhost:5000 | https://localhost:5001$(NC)"
-	ASPNETCORE_ENVIRONMENT=Production dotnet run --project $(PROJECT_FILE) --no-build --urls="http://localhost:5000;https://localhost:5001"
+	ASPNETCORE_ENVIRONMENT=$(ENV) dotnet run \
+		--project $(PROJECT_FILE) \
+		--configuration Release \
+		--no-build \
+		--urls="http://localhost:5000;https://localhost:5001"
+
+# Cibles publiques, faciles à utiliser
+run-dev:
+	@$(MAKE) _run ENV=Development
+
+run-prod:
+	@$(MAKE) _run ENV=Production
 
 # Lancement Railway (simulation)
 run-railway:
