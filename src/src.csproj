@@ -4,7 +4,38 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    
+    <!-- Propriétés de version Git (avec valeurs par défaut) -->
+    <Version Condition="'$(Version)' == ''">1.0.0</Version>
+    <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">1.0.0.0</AssemblyVersion>
+    <FileVersion Condition="'$(FileVersion)' == ''">1.0.0.0</FileVersion>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">1.0.0</InformationalVersion>
+    
+    <!-- Variables Git avec valeurs par défaut -->
+    <GitTag Condition="'$(GitTag)' == ''">unknown</GitTag>
+    <GitCommit Condition="'$(GitCommit)' == ''">unknown</GitCommit>
+    <GitBranch Condition="'$(GitBranch)' == ''">unknown</GitBranch>
+    <GitDirty Condition="'$(GitDirty)' == ''"></GitDirty>
+    <BuildTime Condition="'$(BuildTime)' == ''">unknown</BuildTime>
+    <BuildEnvironment Condition="'$(BuildEnvironment)' == ''">Local</BuildEnvironment>
+    
+    <!-- Métadonnées du produit -->
+    <Product>LibraryAPI</Product>
+    <Company>NDXDeveloper</Company>
+    <Authors>Nicolas DEOUX</Authors>
+    <Copyright>© 2025 Nicolas DEOUX</Copyright>
+    <Description>API REST pour la gestion de livres et magazines</Description>
   </PropertyGroup>
+
+  <!-- Métadonnées Git incluses dans l'assembly -->
+  <ItemGroup>
+    <AssemblyMetadata Include="GitTag" Value="$(GitTag)" />
+    <AssemblyMetadata Include="GitCommit" Value="$(GitCommit)" />
+    <AssemblyMetadata Include="GitBranch" Value="$(GitBranch)" />
+    <AssemblyMetadata Include="GitDirty" Value="$(GitDirty)" />
+    <AssemblyMetadata Include="BuildTime" Value="$(BuildTime)" />
+    <AssemblyMetadata Include="BuildEnvironment" Value="$(BuildEnvironment)" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.8" />

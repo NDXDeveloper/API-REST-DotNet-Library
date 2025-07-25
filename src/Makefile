@@ -153,15 +153,16 @@ build:
 	fi
 	dotnet build $(PROJECT_FILE) \
 		--configuration Release \
-		-p:Version="$(DOTNET_VERSION)" \
-		-p:AssemblyVersion="$(DOTNET_VERSION)" \
-		-p:FileVersion="$(DOTNET_VERSION)" \
-		-p:InformationalVersion="$(VERSION_FULL)" \
-		-p:GitTag="$(GIT_TAG)" \
-		-p:GitCommit="$(GIT_COMMIT)" \
-		-p:GitBranch="$(GIT_BRANCH)" \
-		-p:BuildTime="$(BUILD_TIME)" \
-		-p:BuildEnvironment="$(if $(IS_CI),CI,Local)"
+		--property:Version="$(DOTNET_VERSION)" \
+		--property:AssemblyVersion="$(DOTNET_VERSION)" \
+		--property:FileVersion="$(DOTNET_VERSION)" \
+		--property:InformationalVersion="$(VERSION_FULL)" \
+		--property:GitTag="$(GIT_TAG)" \
+		--property:GitCommit="$(GIT_COMMIT)" \
+		--property:GitBranch="$(GIT_BRANCH)" \
+		--property:GitDirty="$(GIT_DIRTY)" \
+		--property:BuildTime="$(BUILD_TIME)" \
+		--property:BuildEnvironment="$(if $(IS_CI),CI,Local)"
 	@echo "$(GREEN)✅ Build terminé $(VERSION)$(NC)"
 
 # Build développement (force version dev)
