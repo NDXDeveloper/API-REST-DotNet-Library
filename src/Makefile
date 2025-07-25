@@ -1,11 +1,28 @@
 # Makefile pour LibraryAPI .NET 8
 # Usage: make [command]
 
-# Variables
+# Variables de base
 PROJECT_NAME = src
 PROJECT_FILE = $(PROJECT_NAME).csproj
 DOCKER_IMAGE = library-api
 DOCKER_TAG = latest
+
+# === Variables de version Git avec fallbacks sécurisés ===
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_TIME = $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+GIT_COMMIT = $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+GIT_TAG = $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0-dev")
+GIT_BRANCH = $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+GIT_DIRTY = $(shell git diff --quiet 2>/dev/null || echo "-dirty")
+
+# Version nettoyée pour .NET (supprime le 'v' prefix)
+DOTNET_VERSION = $(shell echo $(VERSION) | sed 's/^v//' | sed 's/-dirty//' | sed 's/-dev//' | sed 's/-.*/.0/')
+# Version informative complète
+VERSION_FULL = $(VERSION)+$(shell date +%Y%m%d%H%M).$(shell echo $(GIT_COMMIT) | cut -c1-7)
+
+# Détection de l'environnement
+IS_GIT_REPO = $(shell git rev-parse --git-dir >/dev/null 2>&1 && echo "true" || echo "false")
+IS_CI = $(shell [ -n "$$CI" ] && echo "true" || echo "false")
 
 # Couleurs pour l'affichage
 GREEN = \033[0;32m
@@ -13,7 +30,7 @@ YELLOW = \033[1;33m
 RED = \033[0;31m
 NC = \033[0m # No Color
 
-.PHONY: help install build test clean run-dev run-prod run-railway docker ssl-dev ssl-clean migration-add migration-update migration-list migration-remove migration-script railway-login railway-deploy dev-setup ef-install ef-check ubuntu-setup dotnet-install vscode-install tools-install system-update nuget-restore nuget-update nuget-clean nuget-outdated
+.PHONY: help install build test clean run-dev run-prod run-railway docker ssl-dev ssl-clean migration-add migration-update migration-list migration-remove migration-script railway-login railway-deploy dev-setup ef-install ef-check ubuntu-setup dotnet-install vscode-install tools-install system-update nuget-restore nuget-update nuget-clean nuget-outdated version-info build-dev build-ci build-release auto-build check-env docker-build-versioned create-dev-tag clean-dev-tags version-env
 
 # Affichage de l'aide par défaut
 help:
@@ -28,13 +45,23 @@ help:
 	@echo ""
 	@echo "$(YELLOW)🛠️  Développement :$(NC)"
 	@echo "  make install         - Installer les dépendances"
-	@echo "  make build           - Builder le projet"
+	@echo "  make build           - Builder le projet avec version Git auto"
 	@echo "  make test            - Lancer les tests"
 	@echo "  make clean           - Nettoyer les artifacts"
 	@echo "  make run-dev         - Lancer en mode développement"
 	@echo "  make run-prod        - Lancer en mode production"
 	@echo "  make run-railway     - Lancer en mode Railway"
 	@echo "  make dev-setup       - Configuration complète développement"
+	@echo ""
+	@echo "$(YELLOW)📦 Gestion des versions intelligente :$(NC)"
+	@echo "  make version-info    - Afficher toutes les infos de version"
+	@echo "  make build-dev       - Build forcé en mode développement"
+	@echo "  make build-ci        - Build pour CI/CD (vérifie la version)"
+	@echo "  make build-release   - Build release (tag requis, repo propre)"
+	@echo "  make auto-build      - Build intelligent selon l'environnement"
+	@echo "  make check-env       - Vérifier l'environnement Git"
+	@echo "  make version-env     - Versions pour chaque environnement"
+	@echo "  make create-dev-tag TAG=v1.0.0-alpha - Créer tag développement"
 	@echo ""
 	@echo "$(YELLOW)🔧 Entity Framework Core :$(NC)"
 	@echo "  make ef-install      - Installer l'outil Entity Framework Core globalement"
@@ -66,8 +93,49 @@ help:
 	@echo ""
 	@echo "$(YELLOW)🐳 Docker :$(NC)"
 	@echo "  make docker-build    - Builder image Docker"
+	@echo "  make docker-build-versioned - Docker avec version Git"
 	@echo "  make docker-run      - Lancer conteneur"
 	@echo "  make docker-clean    - Nettoyer images Docker"
+
+# === Gestion des versions ===
+
+# Affichage des informations de version
+version-info:
+	@echo "$(GREEN)📦 Informations de version:$(NC)"
+	@echo "  Version: $(VERSION)"
+	@echo "  Version .NET: $(DOTNET_VERSION)"
+	@echo "  Version complète: $(VERSION_FULL)"
+	@echo "  Tag Git: $(GIT_TAG)"
+	@echo "  Commit: $(GIT_COMMIT)"
+	@echo "  Branche: $(GIT_BRANCH)"
+	@echo "  État: $(if $(findstring dirty,$(VERSION)),sale,propre)"
+	@echo "  Build: $(BUILD_TIME)"
+	@echo "  Repo Git: $(IS_GIT_REPO)"
+	@echo "  CI/CD: $(IS_CI)"
+
+# Vérification de l'environnement
+check-env:
+	@echo "$(GREEN)🔍 Vérification de l'environnement...$(NC)"
+	@if [ "$(IS_GIT_REPO)" = "false" ]; then \
+		echo "$(YELLOW)⚠️  Pas de repository Git - version par défaut 'dev'$(NC)"; \
+	elif [ "$(VERSION)" = "dev" ]; then \
+		echo "$(YELLOW)⚠️  Aucun tag Git trouvé - version 'dev'$(NC)"; \
+		echo "$(YELLOW)Pour créer un tag: git tag v1.0.0$(NC)"; \
+	elif echo "$(VERSION)" | grep -q dirty; then \
+		echo "$(YELLOW)⚠️  Repository sale - version '$(VERSION)'$(NC)"; \
+	else \
+		echo "$(GREEN)✅ Environnement Git propre - version '$(VERSION)'$(NC)"; \
+	fi
+
+# Version pour différents environnements
+version-env:
+	@echo "$(GREEN)📋 Versions par environnement:$(NC)"
+	@echo "  Développement: $(VERSION)"
+	@echo "  Production: $(shell echo $(VERSION) | sed 's/-dirty//' | sed 's/-dev//')"
+	@echo "  Docker: $(if $(findstring dev,$(VERSION)),dev,$(shell echo $(VERSION) | sed 's/^v//'))"
+	@echo "  .NET: $(DOTNET_VERSION)"
+
+# === Build avec versions ===
 
 # Installation des dépendances
 install:
@@ -75,11 +143,88 @@ install:
 	dotnet restore $(PROJECT_FILE)
 	@echo "$(GREEN)✅ Dépendances installées$(NC)"
 
-# Build du projet
+# Build avec gestion intelligente des versions
 build:
-	@echo "$(GREEN)🔨 Build du projet...$(NC)"
-	dotnet build $(PROJECT_FILE) --configuration Release
-	@echo "$(GREEN)✅ Build terminé$(NC)"
+	@echo "$(GREEN)🔨 Build du projet $(VERSION)...$(NC)"
+	@if [ "$(VERSION)" = "dev" ]; then \
+		echo "$(YELLOW)⚠️  Mode développement (pas de Git)$(NC)"; \
+	elif [ "$(IS_GIT_REPO)" = "false" ]; then \
+		echo "$(YELLOW)⚠️  Pas de repository Git détecté$(NC)"; \
+	fi
+	dotnet build $(PROJECT_FILE) \
+		--configuration Release \
+		-p:Version="$(DOTNET_VERSION)" \
+		-p:AssemblyVersion="$(DOTNET_VERSION)" \
+		-p:FileVersion="$(DOTNET_VERSION)" \
+		-p:InformationalVersion="$(VERSION_FULL)" \
+		-p:GitTag="$(GIT_TAG)" \
+		-p:GitCommit="$(GIT_COMMIT)" \
+		-p:GitBranch="$(GIT_BRANCH)" \
+		-p:BuildTime="$(BUILD_TIME)" \
+		-p:BuildEnvironment="$(if $(IS_CI),CI,Local)"
+	@echo "$(GREEN)✅ Build terminé $(VERSION)$(NC)"
+
+# Build développement (force version dev)
+build-dev:
+	@echo "$(GREEN)🔨 Build développement...$(NC)"
+	$(MAKE) build VERSION=dev DOTNET_VERSION=0.0.1
+
+# Build pour CI/CD
+build-ci:
+	@echo "$(GREEN)🔨 Build CI/CD...$(NC)"
+	@if [ "$(VERSION)" = "dev" ] && [ "$(IS_CI)" = "true" ]; then \
+		echo "$(RED)❌ Version 'dev' non autorisée en CI/CD$(NC)"; \
+		echo "$(YELLOW)Créez un tag ou définissez VERSION$(NC)"; \
+		exit 1; \
+	fi
+	$(MAKE) build
+
+# Build release sécurisé
+build-release: check-env
+	@if [ "$(VERSION)" = "dev" ]; then \
+		echo "$(RED)❌ Impossible de faire un build release sans tag Git$(NC)"; \
+		echo "$(YELLOW)Créez un tag: git tag v1.0.0 && git push origin v1.0.0$(NC)"; \
+		exit 1; \
+	fi
+	@if echo "$(VERSION)" | grep -q dirty; then \
+		echo "$(RED)❌ Repository sale, commitez vos changements$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)🚀 Build release $(VERSION)...$(NC)"
+	$(MAKE) build
+
+# Workflow intelligent selon l'environnement
+auto-build:
+	@echo "$(GREEN)🤖 Build automatique...$(NC)"
+	@if [ "$(IS_CI)" = "true" ]; then \
+		echo "$(GREEN)Environnement CI/CD détecté$(NC)"; \
+		$(MAKE) build-ci; \
+	elif [ "$(VERSION)" = "dev" ]; then \
+		echo "$(GREEN)Environnement développement détecté$(NC)"; \
+		$(MAKE) build-dev; \
+	else \
+		echo "$(GREEN)Build standard$(NC)"; \
+		$(MAKE) build; \
+	fi
+
+# Créer un tag de développement
+create-dev-tag:
+	@if [ -z "$(TAG)" ]; then \
+		echo "$(RED)❌ Usage: make create-dev-tag TAG=v1.0.0-alpha$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)🏷️  Création du tag développement $(TAG)...$(NC)"
+	git tag -a $(TAG) -m "Development tag $(TAG)"
+	@echo "$(GREEN)✅ Tag $(TAG) créé (push avec: git push origin $(TAG))$(NC)"
+
+# Nettoyage des tags de développement
+clean-dev-tags:
+	@echo "$(GREEN)🧹 Suppression des tags de développement...$(NC)"
+	@git tag -l | grep -E "(dev|alpha|beta|rc)" | while read tag; do \
+		echo "Suppression de $$tag"; \
+		git tag -d $$tag; \
+	done
+	@echo "$(GREEN)✅ Tags de développement supprimés$(NC)"
 
 # Tests
 test:
@@ -134,9 +279,9 @@ system-update:
 dotnet-install:
 	@echo "$(GREEN)🔧 Installation de .NET 8 SDK...$(NC)"
 	@if command -v dotnet >/dev/null 2>&1; then \
-		echo "$(YELLOW)⚠️  .NET SDK déjà installé : $(dotnet --version)$(NC)"; \
+		echo "$(YELLOW)⚠️  .NET SDK déjà installé : $(shell dotnet --version)$(NC)"; \
 	else \
-		wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb; \
+		wget https://packages.microsoft.com/config/ubuntu/$(shell lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb; \
 		sudo dpkg -i packages-microsoft-prod.deb; \
 		rm packages-microsoft-prod.deb; \
 		sudo apt update; \
@@ -182,7 +327,7 @@ tools-install:
 		sudo apt install -y git; \
 		echo "$(GREEN)✅ Git installé$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠️  Git déjà installé : $(git --version)$(NC)"; \
+		echo "$(YELLOW)⚠️  Git déjà installé : $(shell git --version)$(NC)"; \
 	fi
 
 	# Node.js et npm (pour outils front-end)
@@ -191,21 +336,21 @@ tools-install:
 		sudo apt install -y nodejs; \
 		echo "$(GREEN)✅ Node.js installé$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠️  Node.js déjà installé : $(node --version)$(NC)"; \
+		echo "$(YELLOW)⚠️  Node.js déjà installé : $(shell node --version)$(NC)"; \
 	fi
 
 	# Docker
 	@if ! command -v docker >/dev/null 2>&1; then \
 		sudo apt install -y ca-certificates gnupg lsb-release; \
 		curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg; \
-		echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null; \
+		echo "deb [arch=$(shell dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(shell lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null; \
 		sudo apt update; \
 		sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin; \
-		sudo usermod -aG docker $USER; \
+		sudo usermod -aG docker $$USER; \
 		echo "$(GREEN)✅ Docker installé$(NC)"; \
 		echo "$(YELLOW)⚠️  Redémarrez votre session pour utiliser Docker sans sudo$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠️  Docker déjà installé : $(docker --version)$(NC)"; \
+		echo "$(YELLOW)⚠️  Docker déjà installé : $(shell docker --version)$(NC)"; \
 	fi
 
 	# MySQL Client
@@ -402,7 +547,7 @@ railway-vars: check-railway
 docker-build:
 	@echo "$(GREEN)🐳 Build de l'image Docker...$(NC)"
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
-	@echo "$(GREEN)✅ Image Docker créée: $(DOCKER_IMAGE):$(DOCKER_TAG)$(NC)"
+	@echo "$(GREEN)✅ Image Docker créée$(NC)"
 
 # Lancement conteneur
 docker-run: docker-build
@@ -444,3 +589,74 @@ update-packages:
 	@echo "$(GREEN)📦 Mise à jour des packages...$(NC)"
 	dotnet-outdated upgrade
 	@echo "$(GREEN)✅ Packages mis à jour$(NC)"
+
+# Publish avec version Git
+publish:
+	@echo "$(GREEN)📦 Publication $(VERSION)...$(NC)"
+	dotnet publish $(PROJECT_FILE) \
+		--configuration Release \
+		--output ./publish \
+		-p:Version="$(DOTNET_VERSION)" \
+		-p:InformationalVersion="$(VERSION_FULL)" \
+		-p:GitTag="$(GIT_TAG)" \
+		-p:GitCommit="$(GIT_COMMIT)" \
+		-p:GitBranch="$(GIT_BRANCH)" \
+		-p:BuildTime="$(BUILD_TIME)"
+	@echo "$(GREEN)✅ Publication terminée dans ./publish$(NC)"
+
+# Workflow complet de release
+workflow-release:
+	@if [ -z "$(TAG)" ]; then \
+		echo "$(RED)❌ Usage: make workflow-release TAG=v1.2.3$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)🔄 Workflow de release pour $(TAG)...$(NC)"
+	$(MAKE) check-env
+	@if [ -n "$(shell git status --porcelain)" ]; then \
+		echo "$(RED)❌ Repository sale, commit d'abord$(NC)"; \
+		exit 1; \
+	fi
+	git tag -a $(TAG) -m "Release $(TAG)"
+	$(MAKE) build
+	git push origin $(TAG)
+	@echo "$(GREEN)🎉 Release $(TAG) terminée et poussée !$(NC)"
+
+# Aide pour les commandes de version
+version-help:
+	@echo "$(GREEN)📦 Guide des versions Git:$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🏷️  Créer des tags:$(NC)"
+	@echo "  git tag v1.0.0                    # Tag simple"
+	@echo "  git tag -a v1.0.0 -m 'Release'    # Tag avec message"
+	@echo "  git push origin v1.0.0            # Pousser le tag"
+	@echo ""
+	@echo "$(YELLOW)🔍 Vérifier l'état:$(NC)"
+	@echo "  make version-info                 # Voir toutes les infos"
+	@echo "  make check-env                    # Vérifier environnement"
+	@echo "  git status                        # État du repository"
+	@echo ""
+	@echo "$(YELLOW)🚀 Builds:$(NC)"
+	@echo "  make build                        # Build auto avec version Git"
+	@echo "  make build-dev                    # Build développement"
+	@echo "  make build-release                # Build release (exige tag propre)"
+	@echo "  make auto-build                   # Build intelligent"
+	@echo ""
+	@echo "$(YELLOW)📋 Exemples de versions:$(NC)"
+	@echo "  Sans Git: dev"
+	@echo "  Pas de tag: dev"
+	@echo "  Tag propre: v1.0.2"
+	@echo "  Repository sale: v1.0.2-dirty"
+	@echo "  Tag développement: v1.0.0-alpha"
+
+# Docker avec version robuste
+docker-build-versioned:
+	@echo "$(GREEN)🐳 Build Docker $(VERSION)...$(NC)"
+	docker build \
+		--build-arg VERSION="$(DOTNET_VERSION)" \
+		--build-arg VERSION_FULL="$(VERSION_FULL)" \
+		--build-arg GIT_TAG="$(GIT_TAG)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg BUILD_TIME="$(BUILD_TIME)" \
+		-t $(DOCKER_IMAGE):$(if $(findstring dev,$(VERSION)),dev,$(shell echo $(VERSION) | sed 's/^v//')) \
+		-t $(DOCKER_IMAGE):latest .
+	@echo "$(GREEN)✅ Image Docker créée$(NC)"
