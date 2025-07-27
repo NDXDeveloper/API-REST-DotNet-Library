@@ -1,32 +1,25 @@
-// Importation du namespace pour ASP.NET Core Identity.
-// Identity permet de gérer les utilisateurs, leurs rôles, la connexion, les claims, etc.
 using Microsoft.AspNetCore.Identity;
+using System.ComponentModel.DataAnnotations;
+using LibraryAPI.Models.Validation;
 
 namespace LibraryAPI.Models
 {
     // Déclaration de la classe ApplicationUser, qui étend (hérite de) IdentityUser.
     // IdentityUser est la classe de base fournie par ASP.NET Core Identity pour gérer les utilisateurs.
     // Cette classe inclut des propriétés de base comme UserName, Email, PasswordHash, etc.
-    // ApplicationUser permet d'ajouter des propriétés supplémentaires spécifiques à ton application.
+    // ApplicationUser permet d'ajouter des propriétés supplémentaires spécifiques à notre application.
     public class ApplicationUser : IdentityUser
     {
-        // Propriété FullName : permet de stocker le nom complet de l'utilisateur.
-        // Le point d'interrogation (?) indique que cette propriété est nullable, c'est-à-dire
-        // qu'elle peut ne pas avoir de valeur (null) si l'utilisateur ne fournit pas de nom complet.
+        [SafeNameValidation(MinLength = 2, MaxLength = 100)]
         public string? FullName { get; set; }
-        // Propriété Description : permet de stocker une description personnelle ou une biographie
-        // de l'utilisateur. Elle est également nullable.
+
+        [DescriptionValidation(MaxLength = 1000)]
         public string? Description { get; set; }
-        // Propriété ProfilePicture : permet de stocker l'URL d'une image de profil associée à l'utilisateur.
-        // Cette propriété est aussi nullable, donc l'utilisateur peut ne pas avoir d'image de profil.
+
+        [Url(ErrorMessage = "L'URL de l'image de profil n'est pas valide")]
+        [StringLength(500, ErrorMessage = "L'URL de l'image ne peut dépasser 500 caractères")]
         public string? ProfilePicture { get; set; }
-        // Ajout de cette propriété pour gérer l'upload de l'image de profil
-        //public IFormFile? ProfilePicture { get; set; }
 
-
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow; 
-
-
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }
-

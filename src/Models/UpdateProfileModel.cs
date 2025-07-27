@@ -1,4 +1,6 @@
-using Microsoft.AspNetCore.Http;  // Ajouter cette directive
+using Microsoft.AspNetCore.Http;
+using System.ComponentModel.DataAnnotations;
+using LibraryAPI.Models.Validation;
 
 namespace LibraryAPI.Models
 {
@@ -9,17 +11,22 @@ namespace LibraryAPI.Models
 
     public class UpdateProfileModel
     {
-        // Propriété FullName : représente le nom complet que l'utilisateur souhaite définir ou modifier.
-        // Le point d'interrogation (?) indique que cette propriété est nullable, ce qui signifie que l'utilisateur peut ne pas fournir cette information.
+        [SafeNameValidation(MinLength = 2, MaxLength = 100)]
         public string? FullName { get; set; }
 
-        // Propriété Description : permet à l'utilisateur de mettre à jour ou ajouter une description personnelle ou une biographie.
-        // Elle est également nullable, donc l'utilisateur peut ne pas la remplir.
+        [DescriptionValidation(MaxLength = 1000)]
         public string? Description { get; set; }
 
-        // Propriété ProfilePicture : représente l'URL de l'image de profil que l'utilisateur souhaite ajouter ou mettre à jour.
-        // Comme les autres, elle est nullable, ce qui signifie que l'utilisateur peut ne pas changer l'image de profil.
+        [FileValidation(
+            MaxSize = 5 * 1024 * 1024, // 5MB
+            AllowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" },
+            AllowedMimeTypes = new[] {
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp"
+            }
+        )]
         public IFormFile? ProfilePicture { get; set; }
     }
-    
 }

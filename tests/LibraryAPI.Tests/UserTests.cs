@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Http; // Pour les interfaces HTTP
 using LibraryAPI.Data; // Pour accéder à la base de données
 using LibraryAPI.Models; // Pour les modèles de données
 using System.Threading.Tasks; // Pour la gestion des tâches asynchrones
-using SignInResult = Microsoft.AspNetCore.Identity.SignInResult; // Pour éviter les conflits de noms 
+using SignInResult = Microsoft.AspNetCore.Identity.SignInResult; // Pour éviter les conflits de noms
 
 using System.IdentityModel.Tokens.Jwt;           // Pour JwtSecurityToken, JwtSecurityTokenHandler, JwtRegisteredClaimNames
 using System.Security.Claims;                    // Pour Claim et ClaimTypes
@@ -17,7 +17,7 @@ using Microsoft.IdentityModel.Tokens;            // Pour SymmetricSecurityKey, S
 using System.Text;                               // Pour Encoding
 
 
-namespace UnitTests // Définition de l'espace de noms pour ce fichier de tests utilisateurs 
+namespace UnitTests // Définition de l'espace de noms pour ce fichier de tests utilisateurs
 {
     public class UserTests // Déclaration de la classe de test
     {
@@ -34,15 +34,16 @@ namespace UnitTests // Définition de l'espace de noms pour ce fichier de tests 
             // Crée un mock pour l'interface qui stocke les utilisateurs.
             var store = new Mock<IUserStore<ApplicationUser>>();
             // Initialise le mock pour UserManager.
-            _mockUserManager = new Mock<UserManager<ApplicationUser>>(store.Object, null, null, null, null, null, null, null, null);
+            _mockUserManager = new Mock<UserManager<ApplicationUser>>(store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
 
             // Mock SignInManager
             // Initialise le mock pour SignInManager avec le mock de UserManager et d'autres dépendances.
-            _mockSignInManager = new Mock<SignInManager<ApplicationUser>>(_mockUserManager.Object, Mock.Of<IHttpContextAccessor>(), Mock.Of<IUserClaimsPrincipalFactory<ApplicationUser>>(), null, null, null, null);
+            _mockSignInManager = new Mock<SignInManager<ApplicationUser>>(_mockUserManager.Object, Mock.Of<IHttpContextAccessor>(), Mock.Of<IUserClaimsPrincipalFactory<ApplicationUser>>(), null!, null!, null!, null!);
 
             // Initialize IConfiguration if needed
             // Crée un dictionnaire pour stocker les paramètres de configuration en mémoire.
-            var inMemorySettings = new Dictionary<string, string>
+            // CORRECTION: Utilisation de Dictionary<string, string?> au lieu de Dictionary<string, string>
+            var inMemorySettings = new Dictionary<string, string?>
             {
                 {"Jwt:Key", "YourSuperSecretKeyWithAtLeast16Chars"},
                 {"Jwt:Issuer", "LibraryApi"},
@@ -58,14 +59,14 @@ namespace UnitTests // Définition de l'espace de noms pour ce fichier de tests 
         [Fact] // Indique que cette méthode est un test unitaire.
         public async Task Login_ReturnsOkResult_WhenCredentialsAreValid()
         {
-            // Arrange : Ici, vous préparez vos données et configurez le comportement attendu des mocks. 
-            //           Vous définissez l'email et le mot de passe et configurez le mock de SignInManager pour retourner SignInResult.Success 
+            // Arrange : Ici, vous préparez vos données et configurez le comportement attendu des mocks.
+            //           Vous définissez l'email et le mot de passe et configurez le mock de SignInManager pour retourner SignInResult.Success
             //           lorsque la méthode PasswordSignInAsync est appelée avec ces informations.
             var email = "nix@nix.fr";
             var password = "password";
-            
+
             // Mock sign-in logic
-            _mockSignInManager.Setup(x => x.PasswordSignInAsync(email, password, false, false)) 
+            _mockSignInManager.Setup(x => x.PasswordSignInAsync(email, password, false, false))
                 .ReturnsAsync(SignInResult.Success);
 
             // Act : Vous appelez la méthode à tester. Dans ce cas, vous essayez de vous connecter avec les informations d'identification fournies.
@@ -75,14 +76,15 @@ namespace UnitTests // Définition de l'espace de noms pour ce fichier de tests 
             Assert.True(result.Succeeded);
         }
 
-        // Pour générer le Token
+        // Pour générer le Token - VERSION CORRIGÉE
         private string GenerateJwtToken(ApplicationUser user)
         {
+            // CORRECTION: Ajout de vérifications null pour éviter les warnings CS8604
             var claims = new List<Claim>
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(ClaimTypes.Name, user.UserName)
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id ?? string.Empty),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, user.UserName ?? string.Empty)
             };
 
             // Obtenir la clé secrète depuis _configuration

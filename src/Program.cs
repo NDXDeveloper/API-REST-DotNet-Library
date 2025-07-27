@@ -1,3 +1,5 @@
+
+using Microsoft.AspNetCore.Mvc;  
 // Importation des bibliothèques nécessaires pour utiliser Entity Framework Core avec un fournisseur de base de données
 using Microsoft.EntityFrameworkCore; 
 // Importation des bibliothèques nécessaires pour configurer l'authentification via JWT (JSON Web Token) dans une application ASP.NET Core
@@ -11,11 +13,25 @@ using Microsoft.AspNetCore.Identity;
 // Importation des bibliothèques nécessaires pour configurer Swagger, un outil de documentation d'API
 using Microsoft.OpenApi.Models; 
 
+// Importations pour les modèles et contexte de données de l'application
 using LibraryAPI.Models;
 using LibraryAPI.Data;
 
+// ✅ NOUVEAUX IMPORTS POUR LA VALIDATION RENFORCÉE
+// Importation des filtres de validation personnalisés
+using LibraryAPI.Filters;
+// Importation des middlewares de validation
+using LibraryAPI.Middleware;
+// Importation pour les attributs de validation
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http.Features;
+
+// ===== INITIALISATION DE L'APPLICATION =====
+
 // Initialisation du constructeur d'application Web avec les paramètres passés (ici, les arguments d'exécution)
 var builder = WebApplication.CreateBuilder(args);
+
+// ===== CONFIGURATION DE LA BASE DE DONNÉES =====
 
 // Configuration de la chaîne de connexion à MariaDB
 // Ceci ajoute le service de contexte de base de données à l'application, en précisant que nous utilisons MariaDB comme SGBD
@@ -26,6 +42,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     // Définition de la version spécifique de MySQL/MariaDB utilisée (ici, la version 10.6.4)
     new MySqlServerVersion(new Version(10, 6, 4)))
 );
+
+// ===== CONFIGURATION DE L'AUTHENTIFICATION =====
 
 // Ajout du système d'authentification avec Identity
 // "Identity" est un système intégré à ASP.NET Core pour la gestion des utilisateurs et des rôles
@@ -61,27 +79,86 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         // Spécifie l'audience valide du jeton (qui doit être le consommateur du jeton, par exemple une application cliente)
         ValidAudience = builder.Configuration["Jwt:Audience"],
-        // Clé utilisée pour signer le jeton, encodée en UTF-8
-        //IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        // Clé utilisée pour signer le jeton, encodée en UTF-8, avec vérification de nullité pour éviter les erreurs
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured.")))
     };
 });
 
+// ===== CONFIGURATION CORS =====
 
 // Configuration de CORS avec une politique pour les endpoints publics
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("PublicApiPolicy", builder =>
     {
+        // Définit les origines autorisées à accéder à l'API (ici, un site de confiance)
         builder.WithOrigins("https://trustedwebsite.com")
+               // Autorise tous les en-têtes HTTP
                .AllowAnyHeader()
+               // Autorise toutes les méthodes HTTP (GET, POST, PUT, DELETE, etc.)
                .AllowAnyMethod();
     });
 });
 
-// Ajout des services de contrôleurs API à l'application
+// ===== ✅ CONFIGURATION DES CONTRÔLEURS AVEC VALIDATION RENFORCÉE =====
+
+// Ajout des services de contrôleurs API à l'application avec validation renforcée
 // Cela permet à l'application de reconnaître et gérer les requêtes HTTP dirigées vers les points de terminaison définis dans les contrôleurs
-builder.Services.AddControllers(); 
+builder.Services.AddControllers(options =>
+{
+    // ✅ AJOUT DES FILTRES DE VALIDATION GLOBALEMENT
+    // Filtre pour valider automatiquement les modèles avant l'exécution des actions
+    options.Filters.Add<ModelValidationFilter>();
+    // Filtre pour vérifier la sécurité des fichiers uploadés (signatures, noms malveillants, etc.)
+    options.Filters.Add<FileValidationFilter>();
+
+    options.Filters.Add<RateLimitingFilter>();
+})
+// ✅ PERSONNALISATION DES RÉPONSES D'ERREURS DE VALIDATION
+.ConfigureApiBehaviorOptions(options =>
+{
+    // Personnaliser la réponse des erreurs de validation pour fournir des informations détaillées
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        // Extraction des erreurs de validation du ModelState
+        var errors = context.ModelState
+            .Where(x => x.Value?.Errors.Count > 0)
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? Array.Empty<string>()
+            );
+
+        // Création d'une réponse structurée avec les erreurs de validation
+        var response = new
+        {
+            Message = "Erreurs de validation détectées",
+            Errors = errors,
+            Timestamp = DateTime.UtcNow,
+            TraceId = context.HttpContext.TraceIdentifier
+        };
+
+        // Retour d'une réponse HTTP 400 (Bad Request) avec les détails des erreurs
+        return new BadRequestObjectResult(response);
+    };
+});
+
+
+// ===== ✅ CONFIGURATION DES UPLOADS DE FICHIERS =====
+
+// Configuration des limitations pour les uploads de fichiers
+builder.Services.Configure<FormOptions>(options =>
+{
+    // Taille maximale autorisée pour les fichiers uploadés (100MB)
+    options.MultipartBodyLengthLimit = 100 * 1024 * 1024; // 100MB
+    // Longueur maximale des valeurs dans les formulaires (illimitée pour les gros fichiers)
+    options.ValueLengthLimit = int.MaxValue;
+    // Nombre maximal de champs dans un formulaire (illimité)
+    options.ValueCountLimit = int.MaxValue;
+    // Longueur maximale des clés de formulaire (illimitée)
+    options.KeyLengthLimit = int.MaxValue;
+});
+
+// ===== CONFIGURATION DE SWAGGER =====
 
 // Ajout de Swagger pour générer la documentation de l'API
 // Swagger génère automatiquement une interface graphique interactive et un fichier JSON décrivant les routes et points de terminaison de l'API
@@ -121,27 +198,57 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Ajout de EmailService pour l'injection de dépendance
+// ===== SERVICES SUPPLÉMENTAIRES =====
+
+// Ajout de EmailService pour l'injection de dépendance (service pour envoyer des emails de notification)
 builder.Services.AddScoped<EmailService>();
+
+// ===== CONSTRUCTION DE L'APPLICATION =====
 
 // Construction de l'application avec tous les services configurés précédemment
 var app = builder.Build();
 
-app.UseHttpsRedirection(); // ← Déjà présent
+// ===== CONFIGURATION DU PIPELINE HTTP =====
 
-// Optionnel : Forcer HTTPS en développement
+// Force la redirection HTTPS pour toutes les requêtes HTTP
+app.UseHttpsRedirection();
+
+// ===== ✅ MIDDLEWARES DE VALIDATION RENFORCÉE =====
+
+// Middleware de gestion des exceptions de validation
+// Capture et gère automatiquement les exceptions de validation lancées dans l'application
+app.UseMiddleware<ValidationExceptionMiddleware>();
+
+// Middleware de logging des validations (uniquement en développement pour éviter les logs excessifs en production)
+if (app.Environment.IsDevelopment())
+{
+    // Log toutes les tentatives de validation échouées pour le débogage
+    app.UseMiddleware<ValidationLoggingMiddleware>();
+}
+
+
+
+
+// ===== CONFIGURATION HTTPS ET SÉCURITÉ =====
+
+// Optionnel : Forcer HTTPS en développement avec HTTP Strict Transport Security
 if (app.Environment.IsDevelopment())
 {
     app.UseHsts(); // HTTP Strict Transport Security
 }
 
-app.UseStaticFiles();  // Permet de servir les fichiers statiques depuis wwwroot
+// ===== FICHIERS STATIQUES =====
 
-// Configuration pour n'activer Swagger que dans l'environnement de développement (en évitant d'exposer la documentation en production)
-//if (app.Environment.IsDevelopment())
+// Permet de servir les fichiers statiques depuis le dossier wwwroot (images, CSS, JS, fichiers uploadés)
+app.UseStaticFiles();
+
+// ===== CONFIGURATION SWAGGER =====
+
+// Configuration pour activer Swagger selon la configuration (évite d'exposer la documentation en production par défaut)
 if (builder.Configuration.GetValue<bool>("EnableSwagger"))
 {
-    app.UseSwagger();  // Active Swagger pour générer la documentation API
+    // Active Swagger pour générer la documentation API
+    app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         // Définition de l'URL où accéder à la documentation de l'API (fichier JSON Swagger)
@@ -149,25 +256,31 @@ if (builder.Configuration.GetValue<bool>("EnableSwagger"))
     });
 }
 
-// Activation de la politique CORS pour les endpoints publics
+// ===== ACTIVATION DES POLITIQUES =====
+
+// Activation de la politique CORS pour les endpoints publics (permet l'accès depuis des domaines externes autorisés)
 app.UseCors("PublicApiPolicy");
 
-// Active l'authentification dans le pipeline des requêtes HTTP
+// Active l'authentification dans le pipeline des requêtes HTTP (vérifie les tokens JWT)
 app.UseAuthentication();
 
 // Active l'autorisation (vérification des droits d'accès aux ressources) dans le pipeline des requêtes HTTP
 app.UseAuthorization();
 
-// ... tout votre code existant jusqu'à ...
+// ===== MAPPING DES ROUTES =====
 
 // Mappage des contrôleurs API pour gérer les requêtes HTTP et les rediriger vers les contrôleurs appropriés
 app.MapControllers();
 
+// Route par défaut pour vérifier que l'API fonctionne
 app.MapGet("/", () => "Library API is running! Go to /swagger for documentation.");
+
+// ===== INITIALISATION DES DONNÉES =====
 
 // Initialisation des rôles et de l'utilisateur admin au démarrage pour BDD vide
 using (var scope = app.Services.CreateScope())
 {
+    // Récupération des services de gestion des rôles et utilisateurs via l'injection de dépendances
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
@@ -183,6 +296,7 @@ using (var scope = app.Services.CreateScope())
     var existingAdmins = await userManager.GetUsersInRoleAsync("Admin");
     if (!existingAdmins.Any())
     {
+        // Création d'un utilisateur administrateur par défaut si aucun n'existe
         var user = new ApplicationUser
         {
             UserName = "admin@library.com",
@@ -190,17 +304,20 @@ using (var scope = app.Services.CreateScope())
             FullName = "Admin",
             Description = "Administrator Account",
             ProfilePicture = null, // Champ nullable
-            EmailConfirmed = true // Confirmer l'email directement
+            EmailConfirmed = true // Confirmer l'email directement pour éviter les étapes de vérification
         };
 
+        // Tentative de création de l'utilisateur avec un mot de passe par défaut
         var result = await userManager.CreateAsync(user, "AdminPass123!");
         if (result.Succeeded)
         {
+            // Assigner le rôle Admin à l'utilisateur créé
             await userManager.AddToRoleAsync(user, "Admin");
             Console.WriteLine("Admin user created: admin@library.com / AdminPass123!");
         }
         else
         {
+            // Affichage des erreurs en cas d'échec de création
             Console.WriteLine("Failed to create admin user:");
             foreach (var error in result.Errors)
             {
@@ -210,7 +327,8 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-
+// ===== LANCEMENT DE L'APPLICATION =====
 
 // Lancement de l'application (écoute des requêtes entrantes)
+// Cette méthode bloque le thread principal et attend les requêtes HTTP
 app.Run();

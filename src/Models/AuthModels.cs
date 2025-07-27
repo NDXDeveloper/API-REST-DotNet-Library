@@ -1,25 +1,34 @@
+using System.ComponentModel.DataAnnotations;
+using LibraryAPI.Models.Validation;
+
 namespace LibraryAPI.Models
 {
 
     // Classe utilisée pour le modèle de données lors de l'enregistrement d'un utilisateur.
-    // Cette classe sera utilisée pour recevoir les informations envoyées par le client (comme un formulaire de registration) lors de la création d'un nouveau compte utilisateur.
-
+    // Cette classe sera utilisée pour recevoir les informations envoyées par le client (comme un formulaire de registration) lors de la création d'un nouveau compte utilisateur
+    
     public class RegisterModel
     {
-        // Propriété FullName : représente le nom complet de l'utilisateur qui sera enregistré.
-        // C'est un champ requis pour l'enregistrement.
-        public string FullName { get; set; }  = string.Empty;
+        [Required(ErrorMessage = "Le nom complet est obligatoire")]
+        [SafeNameValidation(MinLength = 2, MaxLength = 100)]
+        public string FullName { get; set; } = string.Empty;
 
-        // Propriété Email : représente l'email de l'utilisateur qui sera utilisé comme identifiant unique pour la connexion.
-        // C'est un champ requis pour l'enregistrement.
+        [Required(ErrorMessage = "L'email est obligatoire")]
+        [StrictEmailValidation]
         public string Email { get; set; } = string.Empty;
 
-        // Propriété Description : permet à l'utilisateur de fournir une description personnelle ou une biographie lors de l'enregistrement.
-        // C'est un champ optionnel pour l'enregistrement.
+        [DescriptionValidation(MaxLength = 500)]
         public string Description { get; set; } = string.Empty;
 
-        // Propriété Password : représente le mot de passe de l'utilisateur. Ce mot de passe sera hashé avant d'être stocké dans la base de données.
-        // C'est un champ requis pour l'enregistrement.
+        [Required(ErrorMessage = "Le mot de passe est obligatoire")]
+        [StrictPasswordValidation(
+            MinLength = 8,
+            MaxLength = 128,
+            RequireUppercase = true,
+            RequireLowercase = true,
+            RequireDigit = true,
+            RequireSpecialChar = true
+        )]
         public string Password { get; set; } = string.Empty;
     }
 
@@ -28,12 +37,12 @@ namespace LibraryAPI.Models
 
     public class LoginModel
     {
-        // Propriété Email : représente l'email ou l'identifiant de l'utilisateur.
-        // C'est un champ requis pour la connexion.
+        [Required(ErrorMessage = "L'email est obligatoire")]
+        [StrictEmailValidation]
         public string Email { get; set; } = string.Empty;
 
-        // Propriété Password : représente le mot de passe saisi par l'utilisateur pour s'authentifier.
-        // C'est un champ requis pour la connexion.
+        [Required(ErrorMessage = "Le mot de passe est obligatoire")]
+        [StringLength(128, MinimumLength = 1, ErrorMessage = "Le mot de passe est requis")]
         public string Password { get; set; } = string.Empty;
-    }   
+    }
 }

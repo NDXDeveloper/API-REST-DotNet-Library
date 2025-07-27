@@ -19,18 +19,25 @@
 - **ORM** : Entity Framework Core 8.0.8
 - **Authentification** : ASP.NET Core Identity + JWT Bearer
 - **Documentation API** : Swagger/OpenAPI
+- **Tests** : xUnit + Moq + Couverture de code
 - **Déploiement** : Railway (Production)
 
 ### Structure du Projet
 ```
 LibraryAPI/
-├── Controllers/         # Contrôleurs API REST
-├── Models/             # Entités et DTOs
-├── Data/               # Contexte de base de données
-├── Services/           # Services métier (Email)
-├── Migrations/         # Migrations EF Core
-├── wwwroot/           # Fichiers statiques
-└── Configuration/     # Paramètres et configuration
+├── src/
+│   ├── Controllers/         # Contrôleurs API REST
+│   ├── Models/             # Entités et DTOs
+│   │   ├── DTOs/           # Modèles de transfert
+│   │   └── Validation/     # Validation personnalisée
+│   ├── Data/               # Contexte de base de données
+│   ├── Services/           # Services métier (Email)
+│   ├── Middleware/         # Validation et logging
+│   ├── Filters/            # Filtres de sécurité
+│   ├── Migrations/         # Migrations EF Core
+│   └── wwwroot/           # Fichiers statiques
+├── tests/                  # Tests unitaires
+└── docs/                   # Documentation
 ```
 
 ## 🔐 Système d'Authentification
@@ -46,6 +53,9 @@ LibraryAPI/
 - `POST /api/auth/login` - Connexion
 - `PUT /api/auth/update-profile` - Mise à jour profil
 - `GET /api/auth/users` - Liste utilisateurs (Admin)
+- `GET /api/auth/users/{id}` - Détails utilisateur (Admin)
+- `GET /api/auth/users/role/{roleName}` - Utilisateurs par rôle (Admin)
+- `GET /api/auth/users/search` - Recherche d'utilisateurs (Admin)
 
 ## 📖 Gestion des Livres et Magazines
 
@@ -61,6 +71,7 @@ LibraryAPI/
 - `GET /api/bookmagazine/list/paged` - Liste paginée
 - `GET /api/bookmagazine/search/paged` - Recherche paginée
 - `GET /api/bookmagazine/download/{id}` - Téléchargement
+- `GET /api/bookmagazine/download-cover/{id}` - Télécharger couverture
 - `GET /api/bookmagazine/advanced-search/paged` - Recherche avancée
 
 ### Recherche et Filtrage
@@ -68,6 +79,7 @@ LibraryAPI/
 - **Filtres** : Catégorie, auteur, date de publication
 - **Tri** : Popularité, date, téléchargements
 - **Pagination** : Performance optimisée pour grandes collections
+- **Suggestions** : Basées sur l'historique de lecture
 
 ## ⭐ Fonctionnalités Utilisateur
 
@@ -95,7 +107,7 @@ LibraryAPI/
 
 ### Livraison
 - **Interface web** : API pour récupérer les notifications
-- **Email** : Service SMTP configurable
+- **Email** : Service SMTP configurable avec templates HTML
 - **État de lecture** : Suivi des notifications lues/non lues
 
 ## 📊 API Publique et Statistiques
@@ -104,6 +116,7 @@ LibraryAPI/
 - `GET /api/public/top-books-magazines` - Contenus populaires
 - `GET /api/public/stats` - Statistiques générales
 - `GET /api/public/recent-comments` - Commentaires récents
+- `GET /api/routes/list` - Liste de toutes les routes API
 
 ### Rapports Administrateur
 - Activité utilisateurs avec pagination
@@ -149,6 +162,7 @@ Le projet inclut un Makefile sophistiqué avec :
 make ubuntu-setup      # Installation complète environnement
 make build             # Build avec version Git auto
 make run-dev           # Lancement développement
+make test              # Tests unitaires
 make railway-deploy    # Déploiement Railway
 make ssl-dev           # Certificats développement
 ```
@@ -165,7 +179,7 @@ make ssl-dev           # Certificats développement
 - **Notification** : Système de notifications
 
 ### Relations
-- RelationsMany-to-Many pour favoris et historique
+- Relations Many-to-Many pour favoris et historique
 - Relations One-to-Many pour auteurs et catégories
 - Système de commentaires hiérarchiques
 - Notifications liées aux utilisateurs
@@ -181,8 +195,23 @@ make ssl-dev           # Certificats développement
 ### Sécurité
 - **JWT avec expiration** : Tokens sécurisés
 - **Autorisation par rôles** : Admin/User différenciés
-- **Validation des entrées** : Attributs de validation
+- **Validation des entrées** : Attributs de validation personnalisés
 - **Fichiers sécurisés** : UUID pour éviter l'énumération
+- **Rate limiting** : Protection contre les abus
+
+## 🧪 Tests et Qualité
+
+### Infrastructure de Tests
+- **Framework** : xUnit avec Moq pour les mocks
+- **Couverture** : Tests avec rapports de couverture
+- **Base de données** : In-Memory pour les tests
+
+### Commandes de Test
+```bash
+make test              # Tests standard
+make test-debug        # Tests en mode Debug
+make test-coverage     # Tests avec couverture de code
+```
 
 ## 📈 Métriques et Monitoring
 
@@ -249,4 +278,3 @@ LibraryAPI est une solution complète et robuste pour la gestion de bibliothèqu
 - **Monitoring intégré** : Métriques, logs, rapports
 
 Cette API est prête pour la production et peut facilement être étendue pour répondre à des besoins spécifiques supplémentaires.
-
