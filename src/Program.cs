@@ -17,7 +17,7 @@ using Microsoft.OpenApi.Models;
 using LibraryAPI.Models;
 using LibraryAPI.Data;
 
-// ✅ NOUVEAUX IMPORTS POUR LA VALIDATION RENFORCÉE
+// ✅ IMPORTS POUR LA VALIDATION RENFORCÉE
 // Importation des filtres de validation personnalisés
 using LibraryAPI.Filters;
 // Importation des middlewares de validation
@@ -143,6 +143,8 @@ builder.Services.AddControllers(options =>
         return new BadRequestObjectResult(response);
     };
 });
+
+// builder.Services.AddEndpointsApiExplorer();
 
 
 // ===== ✅ CONFIGURATION DES UPLOADS DE FICHIERS =====

@@ -669,4 +669,34 @@ docker-build-versioned:
 		-t $(DOCKER_IMAGE):latest .
 	@echo "$(GREEN)✅ Image Docker créée$(NC)"
 
+# === Health Checks ===
+health-check:
+	@echo "$(GREEN)🏥 Test du health check...$(NC)"
+	@curl -s http://localhost:5000/health | jq . || echo "API non disponible"
+
+health-detailed:
+	@echo "$(GREEN)🔍 Health check détaillé...$(NC)"
+	@curl -s -H "Authorization: Bearer $(TOKEN)" http://localhost:5000/api/health/detailed | jq .
+
+railway-health:
+	@echo "$(GREEN)🚂 Test Railway health check...$(NC)"
+	@curl -s https://your-app.railway.app/health | jq .
+
+	# === Health Checks ===
+health-check:
+	@echo "$(GREEN)🏥 Test du health check simple...$(NC)"
+	@if command -v jq >/dev/null 2>&1; then \
+		curl -k -s https://localhost:5001/health | jq .; \
+	else \
+		curl -k -s https://localhost:5001/health; \
+	fi
+
+health-full:
+	@echo "$(GREEN)🔍 Test du health check complet...$(NC)"
+	@if command -v jq >/dev/null 2>&1; then \
+		curl -k -s https://localhost:5001/api/health | jq .; \
+	else \
+		curl -k -s https://localhost:5001/api/health; \
+	fi
+
 
