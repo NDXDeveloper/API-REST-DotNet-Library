@@ -1,17 +1,17 @@
 
-using Microsoft.AspNetCore.Mvc;  
+using Microsoft.AspNetCore.Mvc;
 // Importation des bibliothèques nécessaires pour utiliser Entity Framework Core avec un fournisseur de base de données
-using Microsoft.EntityFrameworkCore; 
+using Microsoft.EntityFrameworkCore;
 // Importation des bibliothèques nécessaires pour configurer l'authentification via JWT (JSON Web Token) dans une application ASP.NET Core
-using Microsoft.AspNetCore.Authentication.JwtBearer; 
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 // Importation des bibliothèques pour gérer la validation des jetons JWT, notamment pour les configurations de sécurité
-using Microsoft.IdentityModel.Tokens; 
+using Microsoft.IdentityModel.Tokens;
 // Importation de System.Text pour encoder les clés de sécurité sous forme de chaînes de caractères (UTF8)
-using System.Text; 
+using System.Text;
 // Importation de la gestion des identités (utilisateurs, rôles) dans ASP.NET Core via Identity
-using Microsoft.AspNetCore.Identity; 
+using Microsoft.AspNetCore.Identity;
 // Importation des bibliothèques nécessaires pour configurer Swagger, un outil de documentation d'API
-using Microsoft.OpenApi.Models; 
+using Microsoft.OpenApi.Models;
 
 // Importations pour les modèles et contexte de données de l'application
 using LibraryAPI.Models;
@@ -24,7 +24,9 @@ using LibraryAPI.Filters;
 using LibraryAPI.Middleware;
 // Importation pour les attributs de validation
 using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Http.Features;   // Configuration des limitations de formulaires et uploads
+using Microsoft.AspNetCore.RateLimiting;    // Services de limitation de taux des requêtes
+using System.Threading.RateLimiting;    // Options et algorithmes de limitation (FixedWindow, SlidingWindow, etc.)
 
 // ===== INITIALISATION DE L'APPLICATION =====
 
@@ -47,7 +49,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // Ajout du système d'authentification avec Identity
 // "Identity" est un système intégré à ASP.NET Core pour la gestion des utilisateurs et des rôles
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>() 
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     // Stocke les informations des utilisateurs et des rôles dans la base de données via Entity Framework
     .AddEntityFrameworkStores<ApplicationDbContext>()
     // Ajoute des fournisseurs de jetons (utilisés par exemple pour la gestion des tokens de réinitialisation de mot de passe, de vérification des emails, etc.)
@@ -112,7 +114,7 @@ builder.Services.AddControllers(options =>
     // Filtre pour vérifier la sécurité des fichiers uploadés (signatures, noms malveillants, etc.)
     options.Filters.Add<FileValidationFilter>();
 
-    options.Filters.Add<RateLimitingFilter>();
+    //options.Filters.Add<RateLimitingFilter>();
 })
 // ✅ PERSONNALISATION DES RÉPONSES D'ERREURS DE VALIDATION
 .ConfigureApiBehaviorOptions(options =>
@@ -203,6 +205,69 @@ builder.Services.AddSwaggerGen(c =>
 // Ajout de EmailService pour l'injection de dépendance (service pour envoyer des emails de notification)
 builder.Services.AddScoped<EmailService>();
 
+// Configuration des politiques de limitation de taux pour protéger l'API contre les abus
+// Le rate limiting permet de contrôler le nombre de requêtes par utilisateur/IP dans un intervalle de temps donné
+builder.Services.AddRateLimiter(options =>
+{
+    // Politique globale - pour la plupart des endpoints
+    // Utilise l'algorithme "Fixed Window" : un compteur fixe qui se remet à zéro à intervalles réguliers
+    options.AddFixedWindowLimiter("GlobalPolicy", (FixedWindowRateLimiterOptions opt) =>
+    {
+        opt.PermitLimit = 200;        // 200 requêtes autorisées par fenêtre
+        opt.Window = TimeSpan.FromMinutes(1);  // Fenêtre de 1 minute
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;  // Traiter les requêtes en file d'attente dans l'ordre d'arrivée
+        opt.QueueLimit = 50;          // Maximum 50 requêtes en file d'attente
+    });
+
+    // Politique stricte - pour auth et actions sensibles
+    // Plus restrictive pour les endpoints critiques (login, register, reset password, etc.)
+    options.AddFixedWindowLimiter("StrictPolicy", (FixedWindowRateLimiterOptions opt) =>
+    {
+        opt.PermitLimit = 10;         // Seulement 10 requêtes par minute
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 5;           // File d'attente réduite pour les actions sensibles
+    });
+
+    // Politique upload - très restrictive
+    // Protection contre les uploads massifs qui peuvent surcharger le serveur
+    options.AddFixedWindowLimiter("UploadPolicy", (FixedWindowRateLimiterOptions opt) =>
+    {
+        opt.PermitLimit = 3;          // Seulement 3 uploads autorisés
+        opt.Window = TimeSpan.FromMinutes(15);  // Sur une fenêtre de 15 minutes
+        opt.QueueLimit = 2;           // File d'attente très limitée
+    });
+
+    // Politique publique - pour API publique
+    // Plus permissive pour les endpoints publics (consultation, recherche, etc.)
+    options.AddFixedWindowLimiter("PublicPolicy", (FixedWindowRateLimiterOptions opt) =>
+    {
+        opt.PermitLimit = 1000;       // Plus permissif pour les consultations publiques
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 100;         // File d'attente plus importante
+    });
+
+    // Gestion personnalisée des rejets de requêtes
+    // Définit la réponse renvoyée quand la limite est atteinte
+    options.OnRejected = async (context, token) =>
+    {
+        // Statut HTTP 429 "Too Many Requests"
+        context.HttpContext.Response.StatusCode = 429;
+        context.HttpContext.Response.ContentType = "application/json";
+
+        // Création d'une réponse JSON informative
+        var response = new
+        {
+            Message = "Trop de requêtes. Veuillez réessayer plus tard.",
+            RetryAfter = "60 seconds",    // Indication du délai avant de pouvoir réessayer
+            Timestamp = DateTime.UtcNow   // Horodatage pour le debugging
+        };
+        
+        // Sérialisation et envoi de la réponse JSON au client
+        await context.HttpContext.Response.WriteAsync(
+            System.Text.Json.JsonSerializer.Serialize(response), token);
+    };
+});
+
 // ===== CONSTRUCTION DE L'APPLICATION =====
 
 // Construction de l'application avec tous les services configurés précédemment
@@ -266,6 +331,13 @@ app.UseAuthentication();
 
 // Active l'autorisation (vérification des droits d'accès aux ressources) dans le pipeline des requêtes HTTP
 app.UseAuthorization();
+
+// ===== ACTIVATION DU RATE LIMITING DANS LE PIPELINE =====
+
+// Active le middleware de limitation de taux dans le pipeline de traitement des requêtes
+// Doit être placé après UseAuthentication() et UseAuthorization() pour identifier l'utilisateur
+// mais avant MapControllers() pour intercepter les requêtes vers les contrôleurs
+app.UseRateLimiter();
 
 // ===== MAPPING DES ROUTES =====
 

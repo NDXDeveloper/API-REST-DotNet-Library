@@ -10,9 +10,11 @@ using System.IO;  // Pour utiliser Path et FileStream
 using Microsoft.EntityFrameworkCore;
 using LibraryAPI.Data; // Pour utiliser la méthode Include
 using LibraryAPI.Models;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LibraryAPI.Controllers
 {
+    [EnableRateLimiting("StrictPolicy")]
     // Attributs de route et API pour lier ce contrôleur à une route "api/Auth"
     [Route("api/[controller]")]
     [ApiController]

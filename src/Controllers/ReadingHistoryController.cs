@@ -5,9 +5,11 @@ using Microsoft.EntityFrameworkCore; // Permet l'utilisation d'Entity Framework 
 using System.Security.Claims; // Utilisé pour extraire des informations de l'utilisateur connecté (via les claims, comme l'identifiant d'utilisateur) à partir de son token d'authentification.
 using LibraryAPI.Data;
 using LibraryAPI.Models;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LibraryAPI.Controllers
 {
+    [EnableRateLimiting("GlobalPolicy")]
     [ApiController]
     [Route("api/[controller]")]
     [Authorize] // Nécessite que l'utilisateur soit authentifié pour accéder à toutes les actions de ce contrôleur.
