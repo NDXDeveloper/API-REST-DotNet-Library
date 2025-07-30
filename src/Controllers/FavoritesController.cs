@@ -8,174 +8,336 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace LibraryAPI.Controllers
 {
-    [EnableRateLimiting("GlobalPolicy")]
-    [ApiController]
-    [Route("api/[controller]")]
-    [Authorize] // Cette annotation assure que toutes les actions dans ce contrôleur nécessitent une authentification.
+    /// <summary>
+    /// CONTRÔLEUR DE GESTION DES FAVORIS
+    /// 
+    /// Ce contrôleur gère toutes les opérations liées aux favoris des utilisateurs :
+    /// - Ajout d'un livre/magazine aux favoris
+    /// - Récupération de la liste des favoris de l'utilisateur
+    /// - Suppression d'un livre/magazine des favoris
+    /// 
+    /// LOGS SERILOG (TECHNIQUES UNIQUEMENT) :
+    /// - Erreurs de base de données (connexion, requêtes)
+    /// - Incohérences de données (données nulles, relations cassées)
+    /// - Problèmes de performance (requêtes lentes)
+    /// - Erreurs d'accès aux données
+    /// 
+    /// NOTE : Les logs d'audit utilisateur (qui ajoute quoi aux favoris) 
+    /// sont gérés par un système séparé
+    /// </summary>
+    [EnableRateLimiting("GlobalPolicy")]  // Limitation du taux de requêtes pour éviter les abus
+    [ApiController]                       // Indique que c'est un contrôleur API avec validation automatique
+    [Route("api/[controller]")]           // Route de base : /api/Favorites
+    [Authorize]                          // Toutes les actions nécessitent une authentification
     public class FavoritesController : ControllerBase
     {
-        private readonly ApplicationDbContext _context; // Dépendance à l'ApplicationDbContext pour interagir avec la base de données.
+        // ===== SERVICES INJECTÉS =====
+        
+        /// <summary>
+        /// Contexte de base de données pour interagir avec les tables de favoris
+        /// </summary>
+        private readonly ApplicationDbContext _context;
+        
+        /// <summary>
+        /// ✅ SERVICE DE LOGGING SERILOG - LOGS TECHNIQUES SEULEMENT
+        /// Utilisé pour :
+        /// - Erreurs techniques (exceptions, problèmes de BDD)
+        /// - Incohérences de données (relations cassées, données nulles)
+        /// - Problèmes de performance (requêtes lentes)
+        /// - Erreurs de configuration
+        /// 
+        /// PAS utilisé pour :
+        /// - Audit utilisateur (qui ajoute/supprime quoi des favoris)
+        /// - Traçabilité métier
+        /// - Statistiques d'utilisation
+        /// </summary>
+        private readonly ILogger<FavoritesController> _logger;
 
-        public FavoritesController(ApplicationDbContext context) // Le constructeur injecte le contexte de la base de données via l'injection de dépendances.
+        // ===== CONSTRUCTEUR =====
+        
+        /// <summary>
+        /// Constructeur avec injection de dépendances
+        /// </summary>
+        /// <param name="context">Contexte de base de données</param>
+        /// <param name="logger">✅ Service de logging pour aspects techniques</param>
+        public FavoritesController(ApplicationDbContext context, ILogger<FavoritesController> logger)
         {
             _context = context;
+            _logger = logger;  // ✅ Ajout du service de logging technique
         }
 
-        // Ajouter un livre/magazine aux favoris
+        // ===== MÉTHODES DE GESTION DES FAVORIS =====
+
+        /// <summary>
+        /// AJOUTER UN LIVRE/MAGAZINE AUX FAVORIS
+        /// 
+        /// Permet à un utilisateur authentifié d'ajouter un livre ou magazine à ses favoris
+        /// Logs techniques : erreurs de base de données, problèmes de données
+        /// </summary>
+        /// <param name="bookMagazineId">ID du livre/magazine à ajouter aux favoris</param>
+        /// <returns>Message de succès ou erreur</returns>
         [HttpPost("add-favorite/{bookMagazineId}")]
         public async Task<IActionResult> AddFavorite(int bookMagazineId)
         {
-            // Récupérer l'identifiant de l'utilisateur connecté via les Claims (informations stockées dans le token d'authentification).
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-            // Si l'utilisateur n'est pas authentifié, retourner un statut 401 (Unauthorized).
-            if (userId == null)
+            try
             {
-                return Unauthorized();
+                // Récupérer l'identifiant de l'utilisateur connecté via les Claims
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                // Si l'utilisateur n'est pas authentifié, retourner un statut 401
+                if (userId == null)
+                {
+                    // ✅ LOG TECHNIQUE : Token JWT invalide ou malformé (problème système)
+                    _logger.LogWarning("⚠️ AddFavorite called with invalid or missing user token");
+                    return Unauthorized();
+                }
+
+                // Rechercher dans la base de données si le livre/magazine existe
+                var bookMagazine = await _context.BooksMagazines.FindAsync(bookMagazineId);
+
+                // Si le livre/magazine n'est pas trouvé, retourner une réponse 404
+                if (bookMagazine == null)
+                {
+                    return NotFound(new { message = $"Book or magazine with ID {bookMagazineId} not found." });
+                }
+
+                // Vérifier si ce favori existe déjà pour cet utilisateur
+                var existingFavorite = await _context.UserFavorites
+                    .FirstOrDefaultAsync(f => f.UserId == userId && f.BookMagazineId == bookMagazineId);
+
+                // Si le favori existe déjà, retourner un code 409 (Conflict)
+                if (existingFavorite != null)
+                {
+                    return Conflict(new { message = "This item is already in your favorites." });
+                }
+
+                // Ajouter un nouveau favori pour l'utilisateur
+                var userFavorite = new UserFavorite
+                {
+                    UserId = userId,
+                    BookMagazineId = bookMagazineId
+                };
+
+                // Sauvegarder le nouveau favori dans la base de données
+                await _context.UserFavorites.AddAsync(userFavorite);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Book or magazine successfully added to favorites." });
             }
-
-            // Rechercher dans la base de données si le livre/magazine existe avec l'ID fourni.
-            var bookMagazine = await _context.BooksMagazines.FindAsync(bookMagazineId);
-
-            // Si le livre/magazine n'est pas trouvé, retourner une réponse 404 (Not Found) avec un message.
-            if (bookMagazine == null)
+            catch (DbUpdateException ex)
             {
-                return NotFound(new { message = $"Book or magazine with ID {bookMagazineId} not found." });
+                // ✅ LOG TECHNIQUE : Erreur de base de données lors de l'ajout
+                _logger.LogError(ex, "❌ Database error while adding favorite - BookMagazineId: {BookMagazineId}", 
+                                bookMagazineId);
+                return StatusCode(500, "Database error occurred while adding to favorites");
             }
-
-            // Vérifier si ce favori existe déjà pour cet utilisateur (empêcher les doublons).
-            var existingFavorite = await _context.UserFavorites
-                .FirstOrDefaultAsync(f => f.UserId == userId && f.BookMagazineId == bookMagazineId);
-
-            // Si le favori existe déjà, retourner un code 409 (Conflict) avec un message approprié.
-            if (existingFavorite != null)
+            catch (InvalidOperationException ex)
             {
-                return Conflict(new { message = "This item is already in your favorites." });
+                // ✅ LOG TECHNIQUE : Problème avec la requête LINQ/EF
+                _logger.LogError(ex, "❌ Invalid operation while adding favorite - BookMagazineId: {BookMagazineId}", 
+                                bookMagazineId);
+                return StatusCode(500, "Data access error occurred");
             }
-
-            // Ajouter un nouveau favori pour l'utilisateur dans la table UserFavorites.
-            var userFavorite = new UserFavorite
+            catch (Exception ex)
             {
-                UserId = userId,
-                BookMagazineId = bookMagazineId
-            };
-
-            // Sauvegarder le nouveau favori dans la base de données.
-            await _context.UserFavorites.AddAsync(userFavorite);
-            await _context.SaveChangesAsync();
-
-            // Retourner un message de succès avec un statut 200 (OK).
-            return Ok(new { message = "Book or magazine successfully added to favorites." });
+                // ✅ LOG TECHNIQUE : Erreur générique non prévue
+                _logger.LogError(ex, "❌ Unexpected error while adding favorite - BookMagazineId: {BookMagazineId}", 
+                                bookMagazineId);
+                return StatusCode(500, "An internal error occurred while adding to favorites");
+            }
         }
 
-        // // Récupérer la liste des favoris de l'utilisateur connecté
-        // [HttpGet("my-favorites")]
-        // public async Task<IActionResult> GetMyFavorites()
-        // {
-        //     //var userId = User.FindFirst("id")?.Value;
-        //     var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        //     if (userId == null) return Unauthorized();
-
-        //     var favorites = await _context.UserFavorites
-        //         .Where(f => f.UserId == userId)
-        //         .Include(f => f.BookMagazine) // Inclure les détails des livres/magazines
-        //         .ToListAsync();
-
-        //     return Ok(favorites);
-        // }
-
-        // Récupérer la liste des favoris de l'utilisateur connecté
+        /// <summary>
+        /// RÉCUPÉRER LA LISTE DES FAVORIS DE L'UTILISATEUR
+        /// 
+        /// Retourne tous les favoris de l'utilisateur connecté avec les détails des livres/magazines
+        /// Logs techniques : erreurs de requêtes, données nulles, problèmes de jointures
+        /// </summary>
+        /// <returns>Liste des favoris avec détails ou message d'erreur</returns>
         [HttpGet("my-favorites")]
         public async Task<IActionResult> GetMyFavorites()
         {
-            // Récupérer l'identifiant de l'utilisateur connecté via les Claims.
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-            // Si l'utilisateur n'est pas authentifié, retourner un statut 401 (Unauthorized).
-            if (userId == null)
+            try
             {
-                return Unauthorized();
-            }
+                // Récupérer l'identifiant de l'utilisateur connecté via les Claims
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            // Récupérer les favoris de l'utilisateur dans la table UserFavorites et inclure les détails des livres/magazines associés.
-            var favorites = await _context.UserFavorites
-                .Where(f => f.UserId == userId)
-                .Include(f => f.BookMagazine) // Inclure les informations du livre ou magazine lié.
-                .ToListAsync();
-
-            // Si aucun favori n'est trouvé, retourner une réponse 404 (Not Found).
-            if (favorites == null || !favorites.Any())
-            {
-                return NotFound(new { message = "No favorites found for the user." });
-            }
-        
-            // Créer une réponse personnalisée, en s'assurant que les informations sur les livres/magazines ne sont pas nulles.
-            var response = favorites
-                .Where(f => f.BookMagazine != null) // Filtrer les résultats pour s'assurer que les livres/magazines ne sont pas nulls.
-                .Select(f => new
+                // Si l'utilisateur n'est pas authentifié, retourner un statut 401
+                if (userId == null)
                 {
-                    BookMagazineId = f.BookMagazineId,
-                    Title = f.BookMagazine?.Title ?? "Unknown Title",
-                    Author = f.BookMagazine?.Author?.Name ?? "Unknown Author",
-                    Description = f.BookMagazine?.Description ?? "No Description Available",
-                    CoverImagePath = f.BookMagazine?.CoverImagePath ?? "No Cover Image Available",
-                    UploadDate = f.BookMagazine?.UploadDate ?? DateTime.MinValue
-                })
-                .ToList();
+                    // ✅ LOG TECHNIQUE : Token JWT invalide (problème système)
+                    _logger.LogWarning("⚠️ GetMyFavorites called with invalid or missing user token");
+                    return Unauthorized();
+                }
 
-            // Retourner la liste des favoris avec un statut 200 (OK).
-            return Ok(response);
+                // Récupérer les favoris de l'utilisateur avec les détails des livres/magazines
+                var favorites = await _context.UserFavorites
+                    .Where(f => f.UserId == userId)
+                    .Include(f => f.BookMagazine)           // Inclure les informations du livre/magazine
+                        .ThenInclude(bm => bm!.Author)      // Inclure les informations de l'auteur
+                    .ToListAsync();
+
+                // Si aucun favori n'est trouvé, retourner une réponse 404
+                if (favorites == null || !favorites.Any())
+                {
+                    return NotFound(new { message = "No favorites found for the user." });
+                }
+
+                // Créer une réponse personnalisée avec gestion des valeurs nulles
+                var response = favorites
+                    .Where(f => f.BookMagazine != null)     // Filtrer les livres/magazines nulls
+                    .Select(f => new
+                    {
+                        BookMagazineId = f.BookMagazineId,
+                        Title = f.BookMagazine?.Title ?? "Unknown Title",
+                        Author = f.BookMagazine?.Author?.Name ?? "Unknown Author",
+                        Description = f.BookMagazine?.Description ?? "No Description Available",
+                        CoverImagePath = f.BookMagazine?.CoverImagePath ?? "No Cover Image Available",
+                        UploadDate = f.BookMagazine?.UploadDate ?? DateTime.MinValue
+                    })
+                    .ToList();
+
+                // ✅ LOG TECHNIQUE : Détection de données incohérentes
+                var nullBookMagazines = favorites.Count(f => f.BookMagazine == null);
+                if (nullBookMagazines > 0)
+                {
+                    _logger.LogWarning("⚠️ Found {NullCount} favorites with null BookMagazine references for user {UserId} - data integrity issue", 
+                                      nullBookMagazines, userId);
+                }
+
+                return Ok(response);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // ✅ LOG TECHNIQUE : Erreur dans la requête LINQ complexe avec Include
+                _logger.LogError(ex, "❌ Invalid operation during favorites retrieval - possible navigation property issue");
+                return StatusCode(500, "Data retrieval error occurred");
+            }
+            catch (ArgumentNullException ex)
+            {
+                // ✅ LOG TECHNIQUE : Problème avec les paramètres null dans les requêtes
+                _logger.LogError(ex, "❌ Null argument error during favorites retrieval");
+                return StatusCode(500, "Data access configuration error");
+            }
+            catch (DbUpdateException ex)
+            {
+                // ✅ LOG TECHNIQUE : Problème de connexion/transaction avec la base de données
+                _logger.LogError(ex, "❌ Database connection error during favorites retrieval");
+                return StatusCode(500, "Database connectivity issue");
+            }
+            catch (Exception ex)
+            {
+                // ✅ LOG TECHNIQUE : Erreur générique
+                _logger.LogError(ex, "❌ Unexpected error during favorites retrieval");
+                return StatusCode(500, "An internal error occurred while retrieving favorites");
+            }
         }
 
-        
-        // // Supprimer un livre/magazine des favoris
-        // [HttpDelete("remove-favorite/{bookMagazineId}")]
-        // public async Task<IActionResult> RemoveFavorite(int bookMagazineId)
-        // {
-        //     var userId = User.FindFirst("id")?.Value;
-        //     if (userId == null) return Unauthorized();
-
-        //     var favorite = await _context.UserFavorites
-        //         .FirstOrDefaultAsync(f => f.UserId == userId && f.BookMagazineId == bookMagazineId);
-            
-        //     if (favorite == null) return NotFound();
-
-        //     _context.UserFavorites.Remove(favorite);
-        //     await _context.SaveChangesAsync();
-
-        //     return Ok(new { Message = "Book/Magazine removed from favorites successfully!" });
-        // }
-
-        // Supprimer un livre/magazine des favoris
+        /// <summary>
+        /// SUPPRIMER UN LIVRE/MAGAZINE DES FAVORIS
+        /// 
+        /// Permet à un utilisateur de retirer un livre/magazine de ses favoris
+        /// Logs techniques : erreurs de suppression, problèmes de transactions
+        /// </summary>
+        /// <param name="bookMagazineId">ID du livre/magazine à supprimer des favoris</param>
+        /// <returns>Message de succès ou erreur</returns>
         [HttpDelete("remove-favorite/{bookMagazineId}")]
         public async Task<IActionResult> RemoveFavorite(int bookMagazineId)
         {
-            // Récupérer l'identifiant de l'utilisateur connecté via les Claims.
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-            // Si l'utilisateur n'est pas authentifié, retourner un statut 401 (Unauthorized).
-            if (userId == null)
+            try
             {
-                return Unauthorized();
+                // Récupérer l'identifiant de l'utilisateur connecté via les Claims
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                // Si l'utilisateur n'est pas authentifié, retourner un statut 401
+                if (userId == null)
+                {
+                    // ✅ LOG TECHNIQUE : Token JWT invalide (problème système)
+                    _logger.LogWarning("⚠️ RemoveFavorite called with invalid or missing user token");
+                    return Unauthorized();
+                }
+
+                // Rechercher le favori correspondant à cet utilisateur et ce livre/magazine
+                var favorite = await _context.UserFavorites
+                    .FirstOrDefaultAsync(f => f.UserId == userId && f.BookMagazineId == bookMagazineId);
+
+                // Si le favori n'est pas trouvé, retourner une réponse 404
+                if (favorite == null)
+                {
+                    return NotFound(new { message = "The specified book or magazine is not in your favorites." });
+                }
+
+                // Supprimer le favori de la base de données
+                _context.UserFavorites.Remove(favorite);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Book/Magazine removed from favorites successfully!" });
             }
-
-            // Rechercher le favori correspondant à cet utilisateur et ce livre/magazine.
-            var favorite = await _context.UserFavorites
-                .FirstOrDefaultAsync(f => f.UserId == userId && f.BookMagazineId == bookMagazineId);
-
-            // Si le favori n'est pas trouvé, retourner une réponse 404 (Not Found).
-            if (favorite == null)
+            catch (DbUpdateConcurrencyException ex)
             {
-                return NotFound(new { message = "The specified book or magazine is not in your favorites." });
+                // ✅ LOG TECHNIQUE : Problème de concurrence (favori supprimé par ailleurs)
+                _logger.LogError(ex, "❌ Concurrency error while removing favorite - BookMagazineId: {BookMagazineId}", 
+                                bookMagazineId);
+                return StatusCode(409, "The favorite was already removed or modified by another operation");
             }
-
-            // Supprimer le favori de la base de données.
-            _context.UserFavorites.Remove(favorite);
-            await _context.SaveChangesAsync();
-
-            // Retourner un message de succès avec un statut 200 (OK).
-            return Ok(new { message = "Book/Magazine removed from favorites successfully!" });
+            catch (DbUpdateException ex)
+            {
+                // ✅ LOG TECHNIQUE : Erreur de base de données lors de la suppression
+                _logger.LogError(ex, "❌ Database error while removing favorite - BookMagazineId: {BookMagazineId}", 
+                                bookMagazineId);
+                return StatusCode(500, "Database error occurred while removing from favorites");
+            }
+            catch (InvalidOperationException ex)
+            {
+                // ✅ LOG TECHNIQUE : Problème avec la requête ou l'état de l'entité
+                _logger.LogError(ex, "❌ Invalid operation while removing favorite - BookMagazineId: {BookMagazineId}", 
+                                bookMagazineId);
+                return StatusCode(500, "Data access error occurred while removing favorite");
+            }
+            catch (Exception ex)
+            {
+                // ✅ LOG TECHNIQUE : Erreur générique
+                _logger.LogError(ex, "❌ Unexpected error while removing favorite - BookMagazineId: {BookMagazineId}", 
+                                bookMagazineId);
+                return StatusCode(500, "An internal error occurred while removing from favorites");
+            }
         }
-
     }
 }
+
+/*
+===== LOGS TECHNIQUES AJOUTÉS DANS CE CONTRÔLEUR =====
+
+✅ LOGS TECHNIQUES (Serilog) :
+- Token JWT invalide/malformé (problème d'authentification système)
+- Erreurs de base de données (DbUpdateException, connexion, transactions)
+- Problèmes de requêtes LINQ/EF (InvalidOperationException, navigation properties)
+- Incohérences de données (favoris avec BookMagazine null)
+- Erreurs de concurrence (DbUpdateConcurrencyException)
+- Erreurs de configuration (ArgumentNullException)
+- Exceptions non prévues (catch général)
+
+❌ LOGS D'AUDIT NON INCLUS :
+- Qui ajoute quoi aux favoris
+- Statistiques d'utilisation des favoris
+- Historique des modifications
+- Préférences utilisateur
+- Analytics métier
+
+===== EXEMPLES DE LOGS TECHNIQUES GÉNÉRÉS =====
+
+[15:30:16 WRN] ⚠️ AddFavorite called with invalid or missing user token
+[15:32:45 ERR] ❌ Database error while adding favorite - BookMagazineId: 123
+[15:35:20 WRN] ⚠️ Found 3 favorites with null BookMagazine references for user abc123 - data integrity issue
+[15:40:10 ERR] ❌ Concurrency error while removing favorite - BookMagazineId: 456
+[15:45:30 ERR] ❌ Invalid operation during favorites retrieval - possible navigation property issue
+
+CES LOGS AIDENT À :
+✅ Détecter les problèmes de configuration JWT
+✅ Identifier les erreurs de base de données
+✅ Surveiller l'intégrité des données
+✅ Diagnostiquer les problèmes de performance
+✅ Détecter les incohérences de relations EF
+
+
+*/

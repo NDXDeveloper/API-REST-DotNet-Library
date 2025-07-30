@@ -1,4 +1,3 @@
-
 using Microsoft.AspNetCore.Mvc;
 // Importation des bibliothèques nécessaires pour utiliser Entity Framework Core avec un fournisseur de base de données
 using Microsoft.EntityFrameworkCore;
@@ -28,10 +27,86 @@ using Microsoft.AspNetCore.Http.Features;   // Configuration des limitations de 
 using Microsoft.AspNetCore.RateLimiting;    // Services de limitation de taux des requêtes
 using System.Threading.RateLimiting;    // Options et algorithmes de limitation (FixedWindow, SlidingWindow, etc.)
 
+// ✅ IMPORTS POUR SERILOG
+using Serilog;
+using Serilog.Events;
+using Serilog.Filters;
+using System.Security.Claims;
+
+// ===== CONFIGURATION SERILOG AVANT builder.Build() =====
+
+// Configuration Serilog avec plusieurs destinations
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+
+    // Enrichisseurs pour ajouter du contexte automatiquement
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "LibraryAPI")
+    .Enrich.WithProperty("Environment", Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown")
+    .Enrich.WithMachineName()
+    .Enrich.WithProcessId()
+    .Enrich.WithThreadId()
+
+    // CONSOLE : Pour le développement (coloré et lisible)
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}: {Message:lj} {Properties:j}{NewLine}{Exception}",
+        restrictedToMinimumLevel: LogEventLevel.Information
+    )
+
+    // FICHIERS : Logs détaillés avec rotation automatique
+    .WriteTo.File(
+        path: "logs/app-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 7,
+        fileSizeLimitBytes: 15_000_000, // 50MB par fichier
+        rollOnFileSizeLimit: true,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj} {Properties:j}{NewLine}{Exception}",
+        restrictedToMinimumLevel: LogEventLevel.Information
+    )
+
+    // FICHIERS ERREURS : Seulement Error et Critical
+    .WriteTo.File(
+        path: "logs/errors-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 7,
+        fileSizeLimitBytes: 15_000_000, // 100MB par fichier
+        rollOnFileSizeLimit: true,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj} {Properties:j}{NewLine}{Exception}",
+        restrictedToMinimumLevel: LogEventLevel.Error
+    )
+
+    // EMAILS : Seulement pour les erreurs critiques (optionnel)
+    /*
+    .WriteTo.Logger(lc => lc
+        .Filter.ByIncludingOnly(Matching.WithProperty<LogEventLevel>("Level", p => p >= LogEventLevel.Error))
+        .WriteTo.Email(
+            fromEmail: builder.Configuration["EmailSettings:SenderEmail"] ?? "noreply@library.com",
+            toEmail: builder.Configuration["EmailSettings:AdminEmail"] ?? "admin@library.com",
+            mailServer: builder.Configuration["EmailSettings:SmtpServer"] ?? "localhost",
+            subject: "[🚨 ALERT] LibraryAPI Critical Error",
+            restrictedToMinimumLevel: LogEventLevel.Error,
+            outputTemplate: "Time: {Timestamp:yyyy-MM-dd HH:mm:ss zzz}\nLevel: {Level}\nMessage: {Message}\nException: {Exception}\nProperties: {Properties}",
+            batchPostingLimit: 1, // Envoyer immédiatement
+            period: TimeSpan.FromSeconds(10) // Vérifier toutes les 10 secondes
+        )
+    )
+    */
+
+    .CreateLogger();
+
 // ===== INITIALISATION DE L'APPLICATION =====
 
 // Initialisation du constructeur d'application Web avec les paramètres passés (ici, les arguments d'exécution)
 var builder = WebApplication.CreateBuilder(args);
+
+// Remplacer le logger par défaut par Serilog
+builder.Host.UseSerilog();
+
+// Message de démarrage
+Log.Information("🚀 LibraryAPI is starting up...");
 
 // ===== CONFIGURATION DE LA BASE DE DONNÉES =====
 
@@ -248,10 +323,19 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueLimit = 100;         // File d'attente plus importante
     });
 
-    // Gestion personnalisée des rejets de requêtes
+    // Gestion personnalisée des rejets de requêtes avec logs
     // Définit la réponse renvoyée quand la limite est atteinte
     options.OnRejected = async (context, token) =>
     {
+        var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
+        var userId = context.HttpContext.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "Anonymous";
+        var path = context.HttpContext.Request.Path;
+        var method = context.HttpContext.Request.Method;
+        var clientIP = context.HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        logger?.LogWarning("🚫 Rate limit exceeded: {Method} {Path} by user {UserId} from IP {ClientIP}",
+                          method, path, userId, clientIP);
+
         // Statut HTTP 429 "Too Many Requests"
         context.HttpContext.Response.StatusCode = 429;
         context.HttpContext.Response.ContentType = "application/json";
@@ -263,7 +347,7 @@ builder.Services.AddRateLimiter(options =>
             RetryAfter = "60 seconds",    // Indication du délai avant de pouvoir réessayer
             Timestamp = DateTime.UtcNow   // Horodatage pour le debugging
         };
-        
+
         // Sérialisation et envoi de la réponse JSON au client
         await context.HttpContext.Response.WriteAsync(
             System.Text.Json.JsonSerializer.Serialize(response), token);
@@ -280,6 +364,120 @@ var app = builder.Build();
 // Force la redirection HTTPS pour toutes les requêtes HTTP
 app.UseHttpsRedirection();
 
+// ===== ✅ MIDDLEWARE SERILOG POUR LOGGER TOUTES LES REQUÊTES HTTP =====
+app.UseSerilogRequestLogging(options =>
+{
+    // Template de message pour les requêtes HTTP
+    options.MessageTemplate = "🌐 HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+
+    // Niveau de log selon le statut de réponse
+    options.GetLevel = (httpContext, elapsed, ex) =>
+    {
+        if (ex != null) return LogEventLevel.Error;
+        if (httpContext.Response.StatusCode >= 500) return LogEventLevel.Error;
+        if (httpContext.Response.StatusCode >= 400) return LogEventLevel.Warning;
+        if (elapsed > 5000) return LogEventLevel.Warning; // Requêtes lentes > 5s
+        return LogEventLevel.Information;
+    };
+
+    // Enrichir le contexte avec des informations supplémentaires
+    // ===== ✅ MIDDLEWARE SERILOG POUR LOGGER TOUTES LES REQUÊTES HTTP =====
+    app.UseSerilogRequestLogging(options =>
+    {
+        // Template de message pour les requêtes HTTP
+        options.MessageTemplate = "🌐 HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+
+        // Niveau de log selon le statut de réponse
+        options.GetLevel = (httpContext, elapsed, ex) =>
+        {
+            if (ex != null) return LogEventLevel.Error;
+            if (httpContext.Response.StatusCode >= 500) return LogEventLevel.Error;
+            if (httpContext.Response.StatusCode >= 400) return LogEventLevel.Warning;
+            if (elapsed > 5000) return LogEventLevel.Warning; // Requêtes lentes > 5s
+            return LogEventLevel.Information;
+        };
+
+        // Enrichir le contexte avec des informations supplémentaires
+        options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        {
+            // Informations de la requête
+            diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+            diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+
+            // ✅ CORRECTION: Vérification null pour ContentType
+            if (!string.IsNullOrEmpty(httpContext.Request.ContentType))
+            {
+                diagnosticContext.Set("RequestContentType", httpContext.Request.ContentType);
+            }
+
+            // ✅ CORRECTION: Vérification null pour ContentLength
+            if (httpContext.Request.ContentLength.HasValue)
+            {
+                diagnosticContext.Set("RequestContentLength", httpContext.Request.ContentLength.Value);
+            }
+
+            // Informations client
+            var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(userAgent))
+            {
+                diagnosticContext.Set("UserAgent", userAgent);
+            }
+
+            var clientIP = httpContext.Connection.RemoteIpAddress?.ToString();
+            if (!string.IsNullOrEmpty(clientIP))
+            {
+                diagnosticContext.Set("ClientIP", clientIP);
+            }
+
+            // Informations utilisateur (si authentifié)
+            if (httpContext.User.Identity?.IsAuthenticated == true)
+            {
+                var userId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userName = httpContext.User.Identity.Name;
+                var userRoles = httpContext.User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+
+                if (!string.IsNullOrEmpty(userId))
+                    diagnosticContext.Set("UserId", userId);
+                if (!string.IsNullOrEmpty(userName))
+                    diagnosticContext.Set("UserName", userName);
+                if (userRoles.Any())
+                    diagnosticContext.Set("UserRoles", userRoles);
+            }
+
+            // Informations de réponse
+            // Vérification null pour ResponseContentType
+            if (!string.IsNullOrEmpty(httpContext.Response.ContentType))
+            {
+                diagnosticContext.Set("ResponseContentType", httpContext.Response.ContentType);
+            }
+
+            // Informations spécifiques selon les routes
+            var endpoint = httpContext.GetEndpoint();
+            if (endpoint != null)
+            {
+                // Vérification null pour DisplayName
+                var displayName = endpoint.DisplayName;
+                if (!string.IsNullOrEmpty(displayName))
+                {
+                    diagnosticContext.Set("EndpointName", displayName);
+                }
+            }
+
+            // Détection des fichiers uploadés
+            if (httpContext.Request.HasFormContentType && httpContext.Request.Form.Files.Any())
+            {
+                var fileInfos = httpContext.Request.Form.Files.Select(f => new
+                {
+                    FileName = f.FileName,
+                    Size = f.Length,
+                    ContentType = f.ContentType
+                }).ToList();
+                diagnosticContext.Set("UploadedFiles", fileInfos);
+            }
+        };
+    });
+});
+
 // ===== ✅ MIDDLEWARES DE VALIDATION RENFORCÉE =====
 
 // Middleware de gestion des exceptions de validation
@@ -293,6 +491,8 @@ if (app.Environment.IsDevelopment())
     app.UseMiddleware<ValidationLoggingMiddleware>();
 }
 
+// Ajouter le middleware d'exception global
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 
 
@@ -358,51 +558,81 @@ using (var scope = app.Services.CreateScope())
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-    // Créer le rôle Admin s'il n'existe pas
-    if (!await roleManager.RoleExistsAsync("Admin"))
-        await roleManager.CreateAsync(new IdentityRole("Admin"));
-
-    // Créer le rôle User s'il n'existe pas
-    if (!await roleManager.RoleExistsAsync("User"))
-        await roleManager.CreateAsync(new IdentityRole("User"));
-
-    // Vérifier s'il existe déjà un utilisateur avec le rôle Admin
-    var existingAdmins = await userManager.GetUsersInRoleAsync("Admin");
-    if (!existingAdmins.Any())
+    try
     {
-        // Création d'un utilisateur administrateur par défaut si aucun n'existe
-        var user = new ApplicationUser
+        // Créer le rôle Admin s'il n'existe pas
+        if (!await roleManager.RoleExistsAsync("Admin"))
         {
-            UserName = "admin@library.com",
-            Email = "admin@library.com",
-            FullName = "Admin",
-            Description = "Administrator Account",
-            ProfilePicture = null, // Champ nullable
-            EmailConfirmed = true // Confirmer l'email directement pour éviter les étapes de vérification
-        };
+            await roleManager.CreateAsync(new IdentityRole("Admin"));
+            Log.Information("✅ Admin role created successfully");
+        }
 
-        // Tentative de création de l'utilisateur avec un mot de passe par défaut
-        var result = await userManager.CreateAsync(user, "AdminPass123!");
-        if (result.Succeeded)
+        // Créer le rôle User s'il n'existe pas
+        if (!await roleManager.RoleExistsAsync("User"))
         {
-            // Assigner le rôle Admin à l'utilisateur créé
-            await userManager.AddToRoleAsync(user, "Admin");
-            Console.WriteLine("Admin user created: admin@library.com / AdminPass123!");
+            await roleManager.CreateAsync(new IdentityRole("User"));
+            Log.Information("✅ User role created successfully");
+        }
+
+        // Vérifier s'il existe déjà un utilisateur avec le rôle Admin
+        var existingAdmins = await userManager.GetUsersInRoleAsync("Admin");
+        if (!existingAdmins.Any())
+        {
+            // Création d'un utilisateur administrateur par défaut si aucun n'existe
+            var user = new ApplicationUser
+            {
+                UserName = "admin@library.com",
+                Email = "admin@library.com",
+                FullName = "Admin",
+                Description = "Administrator Account",
+                ProfilePicture = null, // Champ nullable
+                EmailConfirmed = true // Confirmer l'email directement pour éviter les étapes de vérification
+            };
+
+            // Tentative de création de l'utilisateur avec un mot de passe par défaut
+            var result = await userManager.CreateAsync(user, "AdminPass123!");
+            if (result.Succeeded)
+            {
+                // Assigner le rôle Admin à l'utilisateur créé
+                await userManager.AddToRoleAsync(user, "Admin");
+                Log.Information("✅ Admin user created successfully: {Email}", user.Email);
+            }
+            else
+            {
+                // Affichage des erreurs en cas d'échec de création
+                Log.Error("❌ Failed to create admin user. Errors: {Errors}",
+                         string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
         }
         else
         {
-            // Affichage des erreurs en cas d'échec de création
-            Console.WriteLine("Failed to create admin user:");
-            foreach (var error in result.Errors)
-            {
-                Console.WriteLine($"- {error.Description}");
-            }
+            Log.Information("ℹ️ Admin user already exists");
         }
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "❌ Error during database initialization");
     }
 }
 
+// ===== MESSAGE DE DÉMARRAGE =====
+Log.Information("🎉 LibraryAPI started successfully on {Environment} environment", app.Environment.EnvironmentName);
+
 // ===== LANCEMENT DE L'APPLICATION =====
 
-// Lancement de l'application (écoute des requêtes entrantes)
-// Cette méthode bloque le thread principal et attend les requêtes HTTP
-app.Run();
+try
+{
+    // Lancement de l'application (écoute des requêtes entrantes)
+    // Cette méthode bloque le thread principal et attend les requêtes HTTP
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "💥 Application terminated unexpectedly");
+}
+finally
+{
+    // Nettoyage Serilog à la fermeture
+    Log.Information("🛑 LibraryAPI is shutting down...");
+    Log.CloseAndFlush();
+}
