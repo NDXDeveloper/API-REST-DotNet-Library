@@ -699,4 +699,30 @@ health-full:
 		curl -k -s https://localhost:5001/api/health; \
 	fi
 
+# Afficher les logs en temps réel
+logs-tail:
+	@echo "$(GREEN)📊 Logs en temps réel...$(NC)"
+	tail -f logs/app-$(shell date +%Y%m%d).log
 
+# Afficher les erreurs du jour
+logs-errors:
+	@echo "$(GREEN)🚨 Erreurs du jour...$(NC)"
+	@if [ -f "logs/errors-$(shell date +%Y%m%d).log" ]; then \
+		cat logs/errors-$(shell date +%Y%m%d).log; \
+	else \
+		echo "$(GREEN)✅ Aucune erreur aujourd'hui !$(NC)"; \
+	fi
+
+# Nettoyer les anciens logs
+logs-clean:
+	@echo "$(GREEN)🧹 Nettoyage des logs anciens...$(NC)"
+	find logs -name "*.log" -mtime +30 -delete
+	@echo "$(GREEN)✅ Logs > 30 jours supprimés$(NC)"
+
+# Analyser les logs
+logs-stats:
+	@echo "$(GREEN)📈 Statistiques des logs...$(NC)"
+	@echo "Requêtes aujourd'hui:"
+	@grep -c "HTTP" logs/app-$(shell date +%Y%m%d).log 2>/dev/null || echo "0"
+	@echo "Erreurs aujourd'hui:"
+	@grep -c "Error" logs/errors-$(shell date +%Y%m%d).log 2>/dev/null || echo "0"
