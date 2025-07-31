@@ -25,7 +25,7 @@ public class GlobalExceptionMiddleware
     // Service de logging pour enregistrer les erreurs dans les fichiers de logs
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
 
-    private readonly AuditLogger _auditLogger;
+    //private readonly AuditLogger _auditLogger;
 
     // ===== CONSTRUCTEUR =====
 
@@ -35,11 +35,11 @@ public class GlobalExceptionMiddleware
     /// </summary>
     /// <param name="next">Le prochain middleware dans le pipeline</param>
     /// <param name="logger">Service de logging injecté automatiquement</param>
-    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger, AuditLogger auditLogger)
+    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
     {
         _next = next;   // Stocke la référence vers le middleware suivant
         _logger = logger;   // Stocke le service de logging
-        _auditLogger = auditLogger;
+        
     }
 
     // ===== MÉTHODE PRINCIPALE D'EXÉCUTION =====

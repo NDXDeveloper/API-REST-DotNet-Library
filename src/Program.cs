@@ -641,6 +641,7 @@ using (var scope = app.Services.CreateScope())
         $"Système démarré en environnement {app.Environment.EnvironmentName}");
 }
 
+
 // ===== LANCEMENT DE L'APPLICATION =====
 
 try
