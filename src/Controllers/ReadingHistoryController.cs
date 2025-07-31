@@ -55,18 +55,21 @@ namespace LibraryAPI.Controllers
         /// - Traçabilité utilisateur
         /// </summary>
         private readonly ILogger<ReadingHistoryController> _logger;
+        
+        private readonly AuditLogger _auditLogger;
 
         // ===== CONSTRUCTEUR =====
-        
+
         /// <summary>
         /// Constructeur avec injection de dépendances
         /// </summary>
         /// <param name="context">Contexte de base de données</param>
         /// <param name="logger">✅ Service de logging pour aspects techniques</param>
-        public ReadingHistoryController(ApplicationDbContext context, ILogger<ReadingHistoryController> logger)
+        public ReadingHistoryController(ApplicationDbContext context, ILogger<ReadingHistoryController> logger, AuditLogger auditLogger)
         {
             _context = context;
             _logger = logger;  // ✅ Ajout du service de logging technique
+            _auditLogger = auditLogger;
         }
 
         // ===== MÉTHODES DE GESTION DE L'HISTORIQUE =====
@@ -126,6 +129,9 @@ namespace LibraryAPI.Controllers
 
                 // Sauvegarder les modifications dans la base de données
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.BOOK_VIEWED,
+                        $"Historique de lecture mis à jour pour le livre ID {bookMagazineId}");
 
                 return Ok(new { message = "Reading history updated successfully!" });
             }

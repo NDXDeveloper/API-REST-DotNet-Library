@@ -70,6 +70,8 @@ namespace LibraryAPI.Controllers
         /// </summary>
         private readonly ILogger<BookMagazineController> _logger;
 
+        private readonly AuditLogger _auditLogger;
+
         // ===== CONSTRUCTEUR =====
 
         /// <summary>
@@ -78,11 +80,12 @@ namespace LibraryAPI.Controllers
         /// <param name="context">Contexte de base de données</param>
         /// <param name="emailService">Service d'envoi d'emails</param>
         /// <param name="logger">✅ Service de logging pour aspects techniques</param>
-        public BookMagazineController(ApplicationDbContext context, EmailService emailService, ILogger<BookMagazineController> logger)
+        public BookMagazineController(ApplicationDbContext context, EmailService emailService, ILogger<BookMagazineController> logger, AuditLogger auditLogger)
         {
             _context = context;
             _emailService = emailService;
             _logger = logger;  // ✅ Ajout du service de logging technique
+            _auditLogger = auditLogger;
         }
 
         // ===== MÉTHODES CRUD =====
@@ -246,6 +249,9 @@ namespace LibraryAPI.Controllers
 
                 _context.BooksMagazines.Add(bookMagazine);
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.BOOK_CREATED,
+                    $"Nouveau livre créé: '{bookMagazine.Title}' par {author.Name}");
 
                 // ✅ NOUVEAU : Création de notifications ET envoi d'emails pour les admins
                 try
@@ -483,6 +489,9 @@ namespace LibraryAPI.Controllers
                 _context.BooksMagazines.Update(bookMagazine);
                 await _context.SaveChangesAsync();
 
+                await _auditLogger.LogAsync(AuditActions.BOOK_DOWNLOADED,
+                    $"Téléchargement du livre '{bookMagazine.Title}' (ID: {id})");
+
                 var filePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", bookMagazine.FilePath.TrimStart('/'));
 
                 if (!System.IO.File.Exists(filePath))
@@ -573,6 +582,9 @@ namespace LibraryAPI.Controllers
                 bookMagazine.ViewCount++;
                 _context.BooksMagazines.Update(bookMagazine);
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.BOOK_VIEWED,
+                        $"Consultation du livre '{bookMagazine.Title}' (ID: {id})");
 
                 // Calculs d'agrégation sécurisés
                 var averageRating = await _context.Ratings
@@ -907,6 +919,9 @@ namespace LibraryAPI.Controllers
 
                 await _context.SaveChangesAsync();
 
+                await _auditLogger.LogAsync(AuditActions.BOOK_RATED,
+                        $"Note {ratingValue}/5 attribuée au livre ID {bookMagazineId}");
+
                 // Calcul de la moyenne mise à jour
                 var averageRating = _context.Ratings
                     .Where(r => r.BookMagazineId == bookMagazineId)
@@ -996,6 +1011,9 @@ namespace LibraryAPI.Controllers
 
                 _context.Comments.Add(comment);
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.BOOK_COMMENTED,
+                        $"Commentaire ajouté sur le livre ID {bookMagazineId}");
 
                 // Gestion des notifications (non bloquante)
                 try
@@ -1152,6 +1170,9 @@ namespace LibraryAPI.Controllers
                 // Suppression de l'enregistrement en base de données
                 _context.BooksMagazines.Remove(bookMagazine);
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.BOOK_DELETED,
+                    $"Suppression du livre '{bookMagazine.Title}' (ID: {id}) par l'admin");
 
                 // ✅ LOG TECHNIQUE : Statistiques de suppression
                 if (fileErrors > 0)

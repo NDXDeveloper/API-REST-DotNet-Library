@@ -25,6 +25,8 @@ public class GlobalExceptionMiddleware
     // Service de logging pour enregistrer les erreurs dans les fichiers de logs
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
 
+    private readonly AuditLogger _auditLogger;
+
     // ===== CONSTRUCTEUR =====
 
     /// <summary>
@@ -33,10 +35,11 @@ public class GlobalExceptionMiddleware
     /// </summary>
     /// <param name="next">Le prochain middleware dans le pipeline</param>
     /// <param name="logger">Service de logging injecté automatiquement</param>
-    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
+    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger, AuditLogger auditLogger)
     {
         _next = next;   // Stocke la référence vers le middleware suivant
         _logger = logger;   // Stocke le service de logging
+        _auditLogger = auditLogger;
     }
 
     // ===== MÉTHODE PRINCIPALE D'EXÉCUTION =====
@@ -123,6 +126,34 @@ public class GlobalExceptionMiddleware
             case TimeoutException:
                 _logger.LogError("⏱️ Operation timeout on {Path} after {Method} request", path, method);
                 break;
+        }
+
+        // ===== LOGS D'AUDIT POUR ÉVÉNEMENTS DE SÉCURITÉ ===== 
+        var auditLogger = context.RequestServices.GetService<AuditLogger>();
+        if (auditLogger != null)
+        {
+            try
+            {
+                switch (exception)
+                {
+                    case UnauthorizedAccessException:
+                        await auditLogger.LogAsync(LibraryAPI.Models.AuditActions.UNAUTHORIZED_ACCESS,
+                            $"Accès non autorisé tenté sur {path} depuis l'IP {clientIP}");
+                        break;
+                    case TimeoutException:
+                        await auditLogger.LogAsync(LibraryAPI.Models.AuditActions.SYSTEM_ERROR,
+                            $"Timeout système sur {path}");
+                        break;
+                    default:
+                        await auditLogger.LogAsync(LibraryAPI.Models.AuditActions.SYSTEM_ERROR,
+                            $"Erreur système: {exception.GetType().Name} sur {path}");
+                        break;
+                }
+            }
+            catch
+            {
+                // Éviter les erreurs en cascade lors de l'audit
+            }
         }
 
         // ===== DÉTERMINATION DU CODE DE STATUT HTTP =====

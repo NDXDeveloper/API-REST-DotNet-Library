@@ -60,20 +60,23 @@ namespace LibraryAPI.Controllers
         /// - Traçabilité métier
         /// </summary>
         private readonly ILogger<NotificationController> _logger;
+        
+        private readonly AuditLogger _auditLogger;
 
         // ===== CONSTRUCTEUR =====
-        
+
         /// <summary>
         /// Constructeur avec injection de dépendances
         /// </summary>
         /// <param name="context">Contexte de base de données</param>
         /// <param name="emailService">Service d'envoi d'emails</param>
         /// <param name="logger">✅ Service de logging pour aspects techniques</param>
-        public NotificationController(ApplicationDbContext context, EmailService emailService, ILogger<NotificationController> logger)
+        public NotificationController(ApplicationDbContext context, EmailService emailService, ILogger<NotificationController> logger, AuditLogger auditLogger)
         {
             _context = context;
             _emailService = emailService;
             _logger = logger;  // ✅ Ajout du service de logging technique
+            _auditLogger = auditLogger;
         }
 
         // ===== MÉTHODES DE GESTION DES NOTIFICATIONS =====
@@ -123,6 +126,9 @@ namespace LibraryAPI.Controllers
                     });
                 }
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.NOTIFICATION_SENT,
+                        $"Notification créée et envoyée à {users.Count} utilisateurs");
 
                 return Ok("Notification created successfully.");
             }
@@ -273,6 +279,9 @@ namespace LibraryAPI.Controllers
                 // ✅ LOG TECHNIQUE : Statistiques d'envoi pour monitoring
                 _logger.LogInformation("📊 Email sending completed - Sent: {EmailsSent}, Skipped: {EmailsSkipped}, Failed: {EmailsFailed}", 
                                       emailsSent, emailsSkipped, emailsFailed);
+
+                await _auditLogger.LogAsync(AuditActions.NOTIFICATION_SENT,
+                        $"Envoi d'emails terminé: {emailsSent} envoyés, {emailsSkipped} ignorés, {emailsFailed} échoués");
 
                 if (emailsFailed > 0)
                 {

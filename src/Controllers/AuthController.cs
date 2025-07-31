@@ -65,17 +65,21 @@ namespace LibraryAPI.Controllers
         /// - Logs de sécurité/conformité
         /// </summary>
         private readonly ILogger<AuthController> _logger;
+        
+        private readonly AuditLogger _auditLogger;
 
         // ===== CONSTRUCTEUR AVEC INJECTION DE DÉPENDANCES =====
-        
+
         public AuthController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             RoleManager<IdentityRole> roleManager,
             IConfiguration configuration,
             ApplicationDbContext context,
-            EmailService emailService, 
-            ILogger<AuthController> logger)  // ✅ Logger pour aspects techniques seulement
+            EmailService emailService,
+            ILogger<AuthController> logger,
+            AuditLogger auditLogger
+            )  // ✅ Logger pour aspects techniques seulement
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -84,6 +88,7 @@ namespace LibraryAPI.Controllers
             _context = context;
             _emailService = emailService;
             _logger = logger;
+            _auditLogger = auditLogger;
         }
 
         // ===== MÉTHODES D'AUTHENTIFICATION =====
@@ -121,12 +126,15 @@ public async Task<IActionResult> Register([FromBody] RegisterModel model)
 
             // On assigne le rôle "User" au nouvel utilisateur
             await _userManager.AddToRoleAsync(user, "User");
+            
+            await _auditLogger.LogAsync(AuditActions.REGISTER,
+                    $"Nouvel utilisateur enregistré: {user.Email}");
 
             // ✅ NOUVEAU : Envoi de l'email de bienvenue
-            try
-            {
-                var welcomeSubject = "🎉 Bienvenue dans votre Bibliothèque Numérique !";
-                var welcomeContent = $@"
+                    try
+                    {
+                        var welcomeSubject = "🎉 Bienvenue dans votre Bibliothèque Numérique !";
+                        var welcomeContent = $@"
 <!DOCTYPE html>
 <html>
 <head>
@@ -361,20 +369,20 @@ public async Task<IActionResult> Register([FromBody] RegisterModel model)
 </body>
 </html>";
 
-                // Envoi de l'email de bienvenue
-                await _emailService.SendEmailAsync(user.Email, welcomeSubject, welcomeContent);
-                
-                // ✅ LOG TECHNIQUE : Succès d'envoi de l'email de bienvenue
-                _logger.LogInformation("✅ Welcome email sent successfully to new user {UserEmail} ({UserId})", 
-                                      user.Email, user.Id);
-            }
-            catch (Exception emailEx)
-            {
-                // ✅ LOG TECHNIQUE : Erreur d'envoi d'email de bienvenue (non bloquante)
-                _logger.LogWarning(emailEx, "⚠️ Failed to send welcome email to new user {UserEmail} ({UserId})", 
-                                  user.Email, user.Id);
-                // L'inscription continue même si l'email échoue
-            }
+                        // Envoi de l'email de bienvenue
+                        await _emailService.SendEmailAsync(user.Email, welcomeSubject, welcomeContent);
+
+                        // ✅ LOG TECHNIQUE : Succès d'envoi de l'email de bienvenue
+                        _logger.LogInformation("✅ Welcome email sent successfully to new user {UserEmail} ({UserId})",
+                                              user.Email, user.Id);
+                    }
+                    catch (Exception emailEx)
+                    {
+                        // ✅ LOG TECHNIQUE : Erreur d'envoi d'email de bienvenue (non bloquante)
+                        _logger.LogWarning(emailEx, "⚠️ Failed to send welcome email to new user {UserEmail} ({UserId})",
+                                          user.Email, user.Id);
+                        // L'inscription continue même si l'email échoue
+                    }
 
             return Ok(new { 
                 Message = "User registered successfully!", 
@@ -428,10 +436,17 @@ public async Task<IActionResult> Register([FromBody] RegisterModel model)
 
                     // Générer un token JWT pour l'utilisateur
                     var token = GenerateJwtToken(user, roles);
+
+                    await _auditLogger.LogAsync(AuditActions.LOGIN_SUCCESS,
+                            $"Connexion réussie pour l'utilisateur: {user.Email}");
+
                     return Ok(new { Token = token });
                 }
 
                 // Pas de log technique pour échec de connexion normale (c'est métier, pas technique)
+                await _auditLogger.LogAsync(AuditActions.LOGIN_FAILED,
+                    $"Tentative de connexion échouée pour: {model.Email}");
+
                 return Unauthorized();
             }
             catch (Exception ex)
@@ -454,6 +469,10 @@ public async Task<IActionResult> Register([FromBody] RegisterModel model)
             {
                 // Déconnexion de l'utilisateur
                 await _signInManager.SignOutAsync();
+
+                await _auditLogger.LogAsync(AuditActions.LOGOUT,
+                        $"Déconnexion de l'utilisateur");
+
                 return Ok(new { Message = "Logged out successfully!" });
             }
             catch (Exception ex)
@@ -557,9 +576,13 @@ public async Task<IActionResult> Register([FromBody] RegisterModel model)
                 var result = await _userManager.UpdateAsync(user);
                 if (result.Succeeded)
                 {
-                    return Ok(new { 
-                        Message = "Profile updated successfully!", 
-                        ProfilePictureUrl = user.ProfilePicture 
+                    await _auditLogger.LogAsync(AuditActions.PROFILE_UPDATED,
+                            $"Profil mis à jour pour l'utilisateur: {user.Email}");
+
+                    return Ok(new
+                    {
+                        Message = "Profile updated successfully!",
+                        ProfilePictureUrl = user.ProfilePicture
                     });
                 }
 

@@ -354,6 +354,18 @@ builder.Services.AddRateLimiter(options =>
         var method = context.HttpContext.Request.Method;
         var clientIP = context.HttpContext.Connection.RemoteIpAddress?.ToString();
 
+        // LOG D'AUDIT 
+        var auditLogger = context.HttpContext.RequestServices.GetService<AuditLogger>();
+        if (auditLogger != null)
+        {
+            try
+            {
+                await auditLogger.LogAsync(AuditActions.RATE_LIMIT_EXCEEDED,
+                    $"Limite de taux dépassée: {method} {path} par {userId} depuis {clientIP}");
+            }
+            catch { } // Éviter les erreurs en cascade
+        }
+
         logger?.LogWarning("🚫 Rate limit exceeded: {Method} {Path} by user {UserId} from IP {ClientIP}",
                           method, path, userId, clientIP);
 
@@ -621,6 +633,14 @@ using (var scope = app.Services.CreateScope())
 // ===== MESSAGE DE DÉMARRAGE =====
 Log.Information("🎉 LibraryAPI started successfully on {Environment} environment", app.Environment.EnvironmentName);
 
+// LOG D'AUDIT SYSTÈME - Injection manuelle
+using (var scope = app.Services.CreateScope())
+{
+    var auditLogger = scope.ServiceProvider.GetRequiredService<AuditLogger>();
+    await auditLogger.LogAsync(AuditActions.SYSTEM_STARTUP,
+        $"Système démarré en environnement {app.Environment.EnvironmentName}");
+}
+
 // ===== LANCEMENT DE L'APPLICATION =====
 
 try
@@ -632,9 +652,28 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "💥 Application terminated unexpectedly");
+    // LOG D'AUDIT SYSTÈME
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var auditLogger = scope.ServiceProvider.GetRequiredService<AuditLogger>();
+        await auditLogger.LogAsync(AuditActions.SYSTEM_ERROR,
+                $"Arrêt inattendu du système: {ex.Message}");
+    }
+    catch { } // Éviter les erreurs en cascade
 }
 finally
 {
+    // LOG D'AUDIT SYSTÈME
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var auditLogger = scope.ServiceProvider.GetRequiredService<AuditLogger>();
+        await auditLogger.LogAsync(AuditActions.SYSTEM_SHUTDOWN,
+            "Arrêt normal du système");
+    }
+    catch { } // Éviter les erreurs en cascade
+
     // Nettoyage Serilog à la fermeture
     Log.Information("🛑 LibraryAPI is shutting down...");
     Log.CloseAndFlush();

@@ -52,18 +52,21 @@ namespace LibraryAPI.Controllers
         /// - Statistiques d'utilisation
         /// </summary>
         private readonly ILogger<FavoritesController> _logger;
+        
+        private readonly AuditLogger _auditLogger;
 
         // ===== CONSTRUCTEUR =====
-        
+
         /// <summary>
         /// Constructeur avec injection de dépendances
         /// </summary>
         /// <param name="context">Contexte de base de données</param>
         /// <param name="logger">✅ Service de logging pour aspects techniques</param>
-        public FavoritesController(ApplicationDbContext context, ILogger<FavoritesController> logger)
+        public FavoritesController(ApplicationDbContext context, ILogger<FavoritesController> logger, AuditLogger auditLogger)
         {
             _context = context;
             _logger = logger;  // ✅ Ajout du service de logging technique
+            _auditLogger = auditLogger; 
         }
 
         // ===== MÉTHODES DE GESTION DES FAVORIS =====
@@ -121,6 +124,10 @@ namespace LibraryAPI.Controllers
                 // Sauvegarder le nouveau favori dans la base de données
                 await _context.UserFavorites.AddAsync(userFavorite);
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.FAVORITE_ADDED,
+                    $"Livre ajouté aux favoris: ID {bookMagazineId}");
+
 
                 return Ok(new { message = "Book or magazine successfully added to favorites." });
             }
@@ -270,6 +277,9 @@ namespace LibraryAPI.Controllers
                 // Supprimer le favori de la base de données
                 _context.UserFavorites.Remove(favorite);
                 await _context.SaveChangesAsync();
+
+                await _auditLogger.LogAsync(AuditActions.FAVORITE_REMOVED,
+                        $"Livre retiré des favoris: ID {bookMagazineId}");
 
                 return Ok(new { message = "Book/Magazine removed from favorites successfully!" });
             }
