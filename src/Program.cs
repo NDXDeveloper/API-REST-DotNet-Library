@@ -282,6 +282,9 @@ builder.Services.AddSwaggerGen(c =>
 // Ajout de EmailService pour l'injection de dépendance (service pour envoyer des emails de notification)
 builder.Services.AddScoped<EmailService>();
 
+builder.Services.AddHttpContextAccessor(); // pas sûr que ce soit utile ici ...
+builder.Services.AddScoped<AuditLogger>();
+
 // Configuration des politiques de limitation de taux pour protéger l'API contre les abus
 // Le rate limiting permet de contrôler le nombre de requêtes par utilisateur/IP dans un intervalle de temps donné
 builder.Services.AddRateLimiter(options =>

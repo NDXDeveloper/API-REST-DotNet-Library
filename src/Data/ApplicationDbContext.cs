@@ -45,6 +45,8 @@ namespace LibraryAPI.Data
         // Notifications 
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<UserNotification> UserNotifications { get; set; }
+        
+        public DbSet<AuditLog> AuditLogs { get; set; }
 
         // Surcharge de la méthode OnModelCreating pour configurer les clés primaires composites
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -88,7 +90,17 @@ namespace LibraryAPI.Data
             // modelBuilder.Entity<FileUuid>()
             // .HasIndex(f => f.Uuid)
             // .IsUnique();
-        
+
+            // Index pour optimiser les requêtes d'audit
+            modelBuilder.Entity<AuditLog>()
+                .HasIndex(a => a.CreatedAt)
+                .HasDatabaseName("IX_AuditLogs_CreatedAt");
+
+            modelBuilder.Entity<AuditLog>()
+                .HasIndex(a => new { a.UserId, a.CreatedAt })
+                .HasDatabaseName("IX_AuditLogs_UserId_CreatedAt");
+
+
         }
     }
 
