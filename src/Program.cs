@@ -32,8 +32,15 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
 using System.Security.Claims;
+using MailKit.Security;  // Pour SecureSocketOptions
+using Serilog.Formatting.Display;  // Pour MessageTemplateTextFormatter
 
-// ===== CONFIGURATION SERILOG AVANT builder.Build() =====
+// ===== INITIALISATION DE L'APPLICATION =====
+
+// Initialisation du constructeur d'application Web avec les paramètres passés (ici, les arguments d'exécution)
+var builder = WebApplication.CreateBuilder(args);
+
+// ===== CONFIGURATION SERILOG APRÈS builder.Build() =====
 
 // Configuration Serilog avec plusieurs destinations
 Log.Logger = new LoggerConfiguration()
@@ -78,29 +85,40 @@ Log.Logger = new LoggerConfiguration()
         restrictedToMinimumLevel: LogEventLevel.Error
     )
 
-    // EMAILS : Seulement pour les erreurs critiques (optionnel)
-    /*
-    .WriteTo.Logger(lc => lc
-        .Filter.ByIncludingOnly(Matching.WithProperty<LogEventLevel>("Level", p => p >= LogEventLevel.Error))
-        .WriteTo.Email(
-            fromEmail: builder.Configuration["EmailSettings:SenderEmail"] ?? "noreply@library.com",
-            toEmail: builder.Configuration["EmailSettings:AdminEmail"] ?? "admin@library.com",
-            mailServer: builder.Configuration["EmailSettings:SmtpServer"] ?? "localhost",
-            subject: "[🚨 ALERT] LibraryAPI Critical Error",
-            restrictedToMinimumLevel: LogEventLevel.Error,
-            outputTemplate: "Time: {Timestamp:yyyy-MM-dd HH:mm:ss zzz}\nLevel: {Level}\nMessage: {Message}\nException: {Exception}\nProperties: {Properties}",
-            batchPostingLimit: 1, // Envoyer immédiatement
-            period: TimeSpan.FromSeconds(10) // Vérifier toutes les 10 secondes
-        )
+// EMAILS : Seulement pour les erreurs critiques 
+.WriteTo.Logger(lc => lc
+    .Filter.ByIncludingOnly(Matching.WithProperty<LogEventLevel>("Level", p => p >= LogEventLevel.Error))
+    .WriteTo.Email(
+        options: new Serilog.Sinks.Email.EmailSinkOptions
+        {
+            From = builder.Configuration["EmailSettings:SenderEmail"] ?? "noreply@library.com",
+            To = new List<string> { builder.Configuration["EmailSettings:AdminEmail"] ?? "admin@library.com" },
+            Host = builder.Configuration["EmailSettings:SmtpServer"] ?? "localhost",
+            Port = int.TryParse(builder.Configuration["EmailSettings:Port"], out int emailPort) ? emailPort : 587,
+            Credentials = new System.Net.NetworkCredential(
+                builder.Configuration["EmailSettings:Username"] ?? "",
+                builder.Configuration["EmailSettings:Password"] ?? ""
+            ),
+            Subject = new Serilog.Formatting.Display.MessageTemplateTextFormatter("[🚨 ERREUR CRITIQUE] LibraryAPI - {Level}"),
+            Body = new Serilog.Formatting.Display.MessageTemplateTextFormatter(
+                "🚨 ERREUR CRITIQUE LibraryAPI 🚨\n\n" +
+                "Time: {Timestamp:yyyy-MM-dd HH:mm:ss zzz}\n" +
+                "Level: {Level}\n" + 
+                "Message: {Message}\n" +
+                "Exception: {Exception}\n" +
+                "Properties: {Properties}\n\n" +
+                "--- Détails Techniques ---\n" +
+                "Application: LibraryAPI\n" +
+                "Environment: " + (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown") + "\n" +
+                "Machine: " + Environment.MachineName
+            )
+        },
+        restrictedToMinimumLevel: LogEventLevel.Error
     )
-    */
+)
 
     .CreateLogger();
 
-// ===== INITIALISATION DE L'APPLICATION =====
-
-// Initialisation du constructeur d'application Web avec les paramètres passés (ici, les arguments d'exécution)
-var builder = WebApplication.CreateBuilder(args);
 
 // Remplacer le logger par défaut par Serilog
 builder.Host.UseSerilog();
@@ -384,101 +402,83 @@ app.UseSerilogRequestLogging(options =>
     };
 
     // Enrichir le contexte avec des informations supplémentaires
-    // ===== ✅ MIDDLEWARE SERILOG POUR LOGGER TOUTES LES REQUÊTES HTTP =====
-    app.UseSerilogRequestLogging(options =>
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
     {
-        // Template de message pour les requêtes HTTP
-        options.MessageTemplate = "🌐 HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+        // Informations de la requête
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+        diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
 
-        // Niveau de log selon le statut de réponse
-        options.GetLevel = (httpContext, elapsed, ex) =>
+        // ✅ CORRECTION: Vérification null pour ContentType
+        if (!string.IsNullOrEmpty(httpContext.Request.ContentType))
         {
-            if (ex != null) return LogEventLevel.Error;
-            if (httpContext.Response.StatusCode >= 500) return LogEventLevel.Error;
-            if (httpContext.Response.StatusCode >= 400) return LogEventLevel.Warning;
-            if (elapsed > 5000) return LogEventLevel.Warning; // Requêtes lentes > 5s
-            return LogEventLevel.Information;
-        };
+            diagnosticContext.Set("RequestContentType", httpContext.Request.ContentType);
+        }
 
-        // Enrichir le contexte avec des informations supplémentaires
-        options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        // ✅ CORRECTION: Vérification null pour ContentLength
+        if (httpContext.Request.ContentLength.HasValue)
         {
-            // Informations de la requête
-            diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
-            diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+            diagnosticContext.Set("RequestContentLength", httpContext.Request.ContentLength.Value);
+        }
 
-            // ✅ CORRECTION: Vérification null pour ContentType
-            if (!string.IsNullOrEmpty(httpContext.Request.ContentType))
+        // Informations client
+        var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(userAgent))
+        {
+            diagnosticContext.Set("UserAgent", userAgent);
+        }
+
+        var clientIP = httpContext.Connection.RemoteIpAddress?.ToString();
+        if (!string.IsNullOrEmpty(clientIP))
+        {
+            diagnosticContext.Set("ClientIP", clientIP);
+        }
+
+        // Informations utilisateur (si authentifié)
+        if (httpContext.User.Identity?.IsAuthenticated == true)
+        {
+            var userId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userName = httpContext.User.Identity.Name;
+            var userRoles = httpContext.User.FindAll(ClaimTypes.Role).Select(c => c.Value);
+
+            if (!string.IsNullOrEmpty(userId))
+                diagnosticContext.Set("UserId", userId);
+            if (!string.IsNullOrEmpty(userName))
+                diagnosticContext.Set("UserName", userName);
+            if (userRoles.Any())
+                diagnosticContext.Set("UserRoles", userRoles);
+        }
+
+        // Informations de réponse
+        // Vérification null pour ResponseContentType
+        if (!string.IsNullOrEmpty(httpContext.Response.ContentType))
+        {
+            diagnosticContext.Set("ResponseContentType", httpContext.Response.ContentType);
+        }
+
+        // Informations spécifiques selon les routes
+        var endpoint = httpContext.GetEndpoint();
+        if (endpoint != null)
+        {
+            // Vérification null pour DisplayName
+            var displayName = endpoint.DisplayName;
+            if (!string.IsNullOrEmpty(displayName))
             {
-                diagnosticContext.Set("RequestContentType", httpContext.Request.ContentType);
+                diagnosticContext.Set("EndpointName", displayName);
             }
+        }
 
-            // ✅ CORRECTION: Vérification null pour ContentLength
-            if (httpContext.Request.ContentLength.HasValue)
+        // Détection des fichiers uploadés
+        if (httpContext.Request.HasFormContentType && httpContext.Request.Form.Files.Any())
+        {
+            var fileInfos = httpContext.Request.Form.Files.Select(f => new
             {
-                diagnosticContext.Set("RequestContentLength", httpContext.Request.ContentLength.Value);
-            }
-
-            // Informations client
-            var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(userAgent))
-            {
-                diagnosticContext.Set("UserAgent", userAgent);
-            }
-
-            var clientIP = httpContext.Connection.RemoteIpAddress?.ToString();
-            if (!string.IsNullOrEmpty(clientIP))
-            {
-                diagnosticContext.Set("ClientIP", clientIP);
-            }
-
-            // Informations utilisateur (si authentifié)
-            if (httpContext.User.Identity?.IsAuthenticated == true)
-            {
-                var userId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var userName = httpContext.User.Identity.Name;
-                var userRoles = httpContext.User.FindAll(ClaimTypes.Role).Select(c => c.Value);
-
-                if (!string.IsNullOrEmpty(userId))
-                    diagnosticContext.Set("UserId", userId);
-                if (!string.IsNullOrEmpty(userName))
-                    diagnosticContext.Set("UserName", userName);
-                if (userRoles.Any())
-                    diagnosticContext.Set("UserRoles", userRoles);
-            }
-
-            // Informations de réponse
-            // Vérification null pour ResponseContentType
-            if (!string.IsNullOrEmpty(httpContext.Response.ContentType))
-            {
-                diagnosticContext.Set("ResponseContentType", httpContext.Response.ContentType);
-            }
-
-            // Informations spécifiques selon les routes
-            var endpoint = httpContext.GetEndpoint();
-            if (endpoint != null)
-            {
-                // Vérification null pour DisplayName
-                var displayName = endpoint.DisplayName;
-                if (!string.IsNullOrEmpty(displayName))
-                {
-                    diagnosticContext.Set("EndpointName", displayName);
-                }
-            }
-
-            // Détection des fichiers uploadés
-            if (httpContext.Request.HasFormContentType && httpContext.Request.Form.Files.Any())
-            {
-                var fileInfos = httpContext.Request.Form.Files.Select(f => new
-                {
-                    FileName = f.FileName,
-                    Size = f.Length,
-                    ContentType = f.ContentType
-                }).ToList();
-                diagnosticContext.Set("UploadedFiles", fileInfos);
-            }
-        };
-    });
+                FileName = f.FileName,
+                Size = f.Length,
+                ContentType = f.ContentType
+            }).ToList();
+            diagnosticContext.Set("UploadedFiles", fileInfos);
+        }
+    };
 });
 
 // ===== ✅ MIDDLEWARES DE VALIDATION RENFORCÉE =====
