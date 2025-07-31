@@ -224,7 +224,7 @@ namespace LibraryAPI.Controllers
                         var content = userNotification.Notification.Content ?? "";
 
                         // Tentative d'envoi de l'email
-                        await _emailService.SendEmailAsync(user.Email, subject, content);
+                        // await _emailService.SendEmailAsync(user.Email, subject, content);
                         
                         // Marquage comme envoyé
                         userNotification.IsSent = true;

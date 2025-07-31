@@ -45,6 +45,11 @@ namespace LibraryAPI.Controllers
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IConfiguration _configuration;
         private readonly ApplicationDbContext _context;
+
+        /// <summary>
+        /// Service d'envoi d'emails pour les notifications par email
+        /// </summary>
+        private readonly EmailService _emailService;
         
         /// <summary>
         /// ✅ SERVICE DE LOGGING SERILOG - LOGS TECHNIQUES SEULEMENT
@@ -69,6 +74,7 @@ namespace LibraryAPI.Controllers
             RoleManager<IdentityRole> roleManager,
             IConfiguration configuration,
             ApplicationDbContext context,
+            EmailService emailService, 
             ILogger<AuthController> logger)  // ✅ Logger pour aspects techniques seulement
         {
             _userManager = userManager;
@@ -76,6 +82,7 @@ namespace LibraryAPI.Controllers
             _roleManager = roleManager;
             _configuration = configuration;
             _context = context;
+            _emailService = emailService;
             _logger = logger;
         }
 
@@ -85,52 +92,311 @@ namespace LibraryAPI.Controllers
         /// INSCRIPTION D'UN NOUVEL UTILISATEUR
         /// Logs techniques : erreurs de création, problèmes de rôles
         /// </summary>
-        [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterModel model)
+[HttpPost("register")]
+public async Task<IActionResult> Register([FromBody] RegisterModel model)
+{
+    try
+    {
+        // Création d'un nouvel utilisateur basé sur les données fournies
+        var user = new ApplicationUser
         {
+            UserName = model.Email,
+            Email = model.Email,
+            FullName = model.FullName,
+            Description = model.Description
+        };
+
+        // Création de l'utilisateur avec le mot de passe fourni
+        var result = await _userManager.CreateAsync(user, model.Password);
+        
+        if (result.Succeeded)
+        {
+            // Si le rôle "User" n'existe pas, on le crée
+            if (!await _roleManager.RoleExistsAsync("User"))
+            {
+                await _roleManager.CreateAsync(new IdentityRole("User"));
+                // ✅ LOG TECHNIQUE : Création de rôle manquant (problème de configuration)
+                _logger.LogWarning("🔧 Had to create missing 'User' role during registration - check initial setup");
+            }
+
+            // On assigne le rôle "User" au nouvel utilisateur
+            await _userManager.AddToRoleAsync(user, "User");
+
+            // ✅ NOUVEAU : Envoi de l'email de bienvenue
             try
             {
-                // Création d'un nouvel utilisateur basé sur les données fournies
-                var user = new ApplicationUser
-                {
-                    UserName = model.Email,
-                    Email = model.Email,
-                    FullName = model.FullName,
-                    Description = model.Description
-                };
+                var welcomeSubject = "🎉 Bienvenue dans votre Bibliothèque Numérique !";
+                var welcomeContent = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <style>
+        body {{ 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }}
+        .email-container {{ 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background-color: white; 
+            border-radius: 15px; 
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            text-align: center; 
+            padding: 40px 20px;
+        }}
+        .header h1 {{ 
+            margin: 0; 
+            font-size: 28px; 
+            font-weight: 300;
+        }}
+        .content {{ 
+            padding: 40px 30px;
+        }}
+        .welcome-message {{ 
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 25px; 
+            border-radius: 10px; 
+            margin: 20px 0; 
+            text-align: center;
+        }}
+        .features {{ 
+            background-color: #f8f9fa; 
+            padding: 25px; 
+            border-radius: 10px; 
+            margin: 25px 0;
+            border-left: 5px solid #667eea;
+        }}
+        .feature-item {{ 
+            margin: 15px 0; 
+            display: flex; 
+            align-items: center;
+        }}
+        .feature-icon {{ 
+            width: 30px; 
+            height: 30px; 
+            background: #667eea; 
+            border-radius: 50%; 
+            display: inline-flex; 
+            align-items: center; 
+            justify-content: center; 
+            margin-right: 15px;
+            color: white;
+            font-weight: bold;
+        }}
+        .cta-button {{ 
+            display: inline-block; 
+            padding: 15px 30px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            text-decoration: none; 
+            border-radius: 25px; 
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            transition: transform 0.3s ease;
+        }}
+        .cta-button:hover {{ 
+            transform: translateY(-2px);
+        }}
+        .footer {{ 
+            text-align: center; 
+            color: #666; 
+            font-size: 14px; 
+            padding: 30px;
+            background-color: #f8f9fa;
+            border-top: 1px solid #eee;
+        }}
+        .user-info {{ 
+            background-color: #e3f2fd; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin: 20px 0;
+            border: 1px solid #bbdefb;
+        }}
+        .highlight {{ 
+            color: #667eea; 
+            font-weight: bold; 
+        }}
+        .stats {{ 
+            display: flex; 
+            justify-content: space-around; 
+            margin: 25px 0;
+            text-align: center;
+        }}
+        .stat-item {{ 
+            flex: 1; 
+            padding: 15px;
+        }}
+        .stat-number {{ 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #667eea;
+        }}
+        .stat-label {{ 
+            font-size: 12px; 
+            color: #666; 
+            text-transform: uppercase;
+        }}
+    </style>
+</head>
+<body>
+    <div class='email-container'>
+        <div class='header'>
+            <h1>📚 Bibliothèque Numérique</h1>
+            <p style='margin: 10px 0 0 0; opacity: 0.9;'>Votre nouvelle aventure littéraire commence ici !</p>
+        </div>
+        
+        <div class='content'>
+            <h2>Bonjour <span class='highlight'>{user.FullName}</span> ! 👋</h2>
+            
+            <div class='welcome-message'>
+                <h3 style='margin: 0 0 10px 0;'>🎉 Félicitations !</h3>
+                <p style='margin: 0; font-size: 16px;'>Votre compte a été créé avec succès. Vous faites maintenant partie de notre communauté de lecteurs passionnés !</p>
+            </div>
 
-                // Création de l'utilisateur avec le mot de passe fourni
-                var result = await _userManager.CreateAsync(user, model.Password);
+            <div class='user-info'>
+                <h4 style='margin-top: 0; color: #1976d2;'>📋 Informations de votre compte :</h4>
+                <p><strong>Email :</strong> {user.Email}</p>
+                <p><strong>Nom complet :</strong> {user.FullName}</p>
+                <p><strong>Date d'inscription :</strong> {DateTime.Now:dd/MM/yyyy à HH:mm}</p>
+                {(!string.IsNullOrEmpty(user.Description) ? $"<p><strong>Description :</strong> {user.Description}</p>" : "")}
+            </div>
+
+            <div class='features'>
+                <h4 style='margin-top: 0; color: #333;'>🚀 Découvrez ce que vous pouvez faire :</h4>
                 
-                if (result.Succeeded)
-                {
-                    // Si le rôle "User" n'existe pas, on le crée
-                    if (!await _roleManager.RoleExistsAsync("User"))
-                    {
-                        await _roleManager.CreateAsync(new IdentityRole("User"));
-                        // ✅ LOG TECHNIQUE : Création de rôle manquant (problème de configuration)
-                        _logger.LogWarning("🔧 Had to create missing 'User' role during registration - check initial setup");
-                    }
-
-                    // On assigne le rôle "User" au nouvel utilisateur
-                    await _userManager.AddToRoleAsync(user, "User");
-
-                    return Ok(new { Message = "User registered successfully!" });
-                }
-
-                // ✅ LOG TECHNIQUE : Erreurs de validation Identity (problème technique)
-                _logger.LogWarning("⚠️ User registration failed due to Identity validation errors: {Errors}",
-                                  string.Join(", ", result.Errors.Select(e => e.Description)));
+                <div class='feature-item'>
+                    <div class='feature-icon'>📖</div>
+                    <div>
+                        <strong>Parcourir la bibliothèque</strong><br>
+                        <small>Explorez notre collection de livres et magazines numériques</small>
+                    </div>
+                </div>
                 
-                return BadRequest(result.Errors);
+                <div class='feature-item'>
+                    <div class='feature-icon'>⬇️</div>
+                    <div>
+                        <strong>Télécharger vos lectures</strong><br>
+                        <small>Accédez à vos livres préférés hors ligne</small>
+                    </div>
+                </div>
+                
+                <div class='feature-item'>
+                    <div class='feature-icon'>❤️</div>
+                    <div>
+                        <strong>Créer votre liste de favoris</strong><br>
+                        <small>Sauvegardez vos lectures coup de cœur</small>
+                    </div>
+                </div>
+                
+                <div class='feature-item'>
+                    <div class='feature-icon'>⭐</div>
+                    <div>
+                        <strong>Noter et commenter</strong><br>
+                        <small>Partagez vos avis avec la communauté</small>
+                    </div>
+                </div>
+                
+                <div class='feature-item'>
+                    <div class='feature-icon'>📊</div>
+                    <div>
+                        <strong>Suivre votre historique</strong><br>
+                        <small>Retrouvez facilement vos lectures passées</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class='stats'>
+                <div class='stat-item'>
+                    <div class='stat-number'>1000+</div>
+                    <div class='stat-label'>Livres disponibles</div>
+                </div>
+                <div class='stat-item'>
+                    <div class='stat-number'>500+</div>
+                    <div class='stat-label'>Magazines</div>
+                </div>
+                <div class='stat-item'>
+                    <div class='stat-number'>24/7</div>
+                    <div class='stat-label'>Accès libre</div>
+                </div>
+            </div>
+
+            <div style='text-align: center; margin: 30px 0;'>
+                <a href='#' class='cta-button'>🚀 Commencer à explorer</a>
+            </div>
+
+            <div style='background-color: #fff3e0; padding: 20px; border-radius: 8px; border-left: 4px solid #ff9800; margin: 25px 0;'>
+                <h4 style='margin-top: 0; color: #ef6c00;'>💡 Conseil pour bien commencer :</h4>
+                <p style='margin-bottom: 0;'>Complétez votre profil et ajoutez une photo pour personnaliser votre expérience. Vous pouvez également parcourir nos catégories populaires pour découvrir de nouveaux genres !</p>
+            </div>
+
+            <div style='background-color: #f3e5f5; padding: 20px; border-radius: 8px; border-left: 4px solid #9c27b0; margin: 25px 0;'>
+                <h4 style='margin-top: 0; color: #7b1fa2;'>🔐 Sécurité de votre compte :</h4>
+                <p style='margin-bottom: 0;'>Gardez vos identifiants en sécurité et n'hésitez pas à nous contacter si vous remarquez une activité suspecte sur votre compte.</p>
+            </div>
+        </div>
+        
+        <div class='footer'>
+            <p><strong>Merci de nous avoir rejoints ! 🙏</strong></p>
+            <p>L'équipe de la Bibliothèque Numérique</p>
+            <hr style='margin: 20px 0; border: none; border-top: 1px solid #eee;'>
+            <p style='font-size: 12px; color: #999;'>
+                📧 Ceci est un email automatique de bienvenue<br>
+                📅 Envoyé le {DateTime.Now:dd/MM/yyyy à HH:mm:ss}<br>
+                🌐 LibraryAPI - Votre bibliothèque numérique personnelle
+            </p>
+        </div>
+    </div>
+</body>
+</html>";
+
+                // Envoi de l'email de bienvenue
+                await _emailService.SendEmailAsync(user.Email, welcomeSubject, welcomeContent);
+                
+                // ✅ LOG TECHNIQUE : Succès d'envoi de l'email de bienvenue
+                _logger.LogInformation("✅ Welcome email sent successfully to new user {UserEmail} ({UserId})", 
+                                      user.Email, user.Id);
             }
-            catch (Exception ex)
+            catch (Exception emailEx)
             {
-                // ✅ LOG TECHNIQUE : Exception non gérée (problème système)
-                _logger.LogError(ex, "❌ Technical error during user registration");
-                return StatusCode(500, "An internal error occurred during registration");
+                // ✅ LOG TECHNIQUE : Erreur d'envoi d'email de bienvenue (non bloquante)
+                _logger.LogWarning(emailEx, "⚠️ Failed to send welcome email to new user {UserEmail} ({UserId})", 
+                                  user.Email, user.Id);
+                // L'inscription continue même si l'email échoue
             }
+
+            return Ok(new { 
+                Message = "User registered successfully!", 
+                UserId = user.Id,
+                Email = user.Email,
+                FullName = user.FullName
+            });
         }
+
+        // ✅ LOG TECHNIQUE : Erreurs de validation Identity (problème technique)
+        _logger.LogWarning("⚠️ User registration failed due to Identity validation errors: {Errors}",
+                          string.Join(", ", result.Errors.Select(e => e.Description)));
+        
+        return BadRequest(result.Errors);
+    }
+    catch (Exception ex)
+    {
+        // ✅ LOG TECHNIQUE : Exception non gérée (problème système)
+        _logger.LogError(ex, "❌ Technical error during user registration");
+        return StatusCode(500, "An internal error occurred during registration");
+    }
+}
 
         /// <summary>
         /// CONNEXION D'UN UTILISATEUR

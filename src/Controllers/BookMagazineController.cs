@@ -47,6 +47,11 @@ namespace LibraryAPI.Controllers
         private readonly ApplicationDbContext _context;
 
         /// <summary>
+        /// Service d'envoi d'emails pour les notifications par email
+        /// </summary>
+        private readonly EmailService _emailService;
+
+        /// <summary>
         /// ✅ SERVICE DE LOGGING SERILOG - LOGS TECHNIQUES SEULEMENT
         /// Utilisé pour :
         /// - Erreurs techniques (exceptions, problèmes système)
@@ -71,10 +76,12 @@ namespace LibraryAPI.Controllers
         /// Constructeur avec injection de dépendances
         /// </summary>
         /// <param name="context">Contexte de base de données</param>
+        /// <param name="emailService">Service d'envoi d'emails</param>
         /// <param name="logger">✅ Service de logging pour aspects techniques</param>
-        public BookMagazineController(ApplicationDbContext context, ILogger<BookMagazineController> logger)
+        public BookMagazineController(ApplicationDbContext context, EmailService emailService, ILogger<BookMagazineController> logger)
         {
             _context = context;
+            _emailService = emailService;
             _logger = logger;  // ✅ Ajout du service de logging technique
         }
 
@@ -240,80 +247,142 @@ namespace LibraryAPI.Controllers
                 _context.BooksMagazines.Add(bookMagazine);
                 await _context.SaveChangesAsync();
 
-                // Création de notifications pour les admins (gestion d'erreurs simplifiée)
+                // ✅ NOUVEAU : Création de notifications ET envoi d'emails pour les admins
                 try
                 {
                     var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
                     if (adminRole != null)
                     {
+                        // Récupérer les admins avec leurs emails
                         var adminUsers = await _context.UserRoles
                             .Where(ur => ur.RoleId == adminRole.Id)
-                            .Select(ur => ur.UserId)
+                            .Join(_context.Users,
+                                  ur => ur.UserId,
+                                  u => u.Id,
+                                  (ur, u) => new { u.Id, u.Email, u.UserName })
                             .ToListAsync();
 
-                        var notification = new Notification
+                        if (adminUsers.Any())
                         {
-                            Subject = "📚 Nouveau livre ajouté à la bibliothèque",
-                            Content = $@"
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <style>
-                                body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; }}
-                                .container {{ max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; }}
-                                .header {{ text-align: center; color: #333; margin-bottom: 30px; }}
-                                .book-info {{ background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-                                .footer {{ text-align: center; color: #666; font-size: 14px; margin-top: 30px; }}
-                                .btn {{ display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; }}
-                            </style>
-                        </head>
-                        <body>
-                            <div class='container'>
-                                <div class='header'>
-                                    <h1>📚 Nouveau livre ajouté !</h1>
-                                </div>
-                                <p>Bonjour Administrateur,</p>
-                                <p>Un nouveau livre vient d'être ajouté à la bibliothèque numérique :</p>
-                                <div class='book-info'>
-                                    <h3>📖 {bookMagazine.Title}</h3>
-                                    <p><strong>Auteur :</strong> {author.Name}</p>
-                                    <p><strong>Date d'ajout :</strong> {DateTime.Now:dd/MM/yyyy à HH:mm}</p>
-                                </div>
-                                <p>Vous pouvez consulter ce livre et le modérer si nécessaire via votre dashboard administrateur.</p>
-                                <p>Le nouveau livre a été ajouté par l'utilisateur {userId}</p>
-                                <div class='footer'>
-                                    <p>📧 Ceci est un email automatique de votre Library API</p>
-                                </div>
-                            </div>
-                        </body>
-                        </html>",
-                            CreatedAt = DateTime.Now,
-                            IsRead = false
-                        };
-
-                        _context.Notifications.Add(notification);
-                        await _context.SaveChangesAsync();
-
-                        foreach (var adminId in adminUsers)
-                        {
-                            _context.UserNotifications.Add(new UserNotification
+                            // Créer la notification en base
+                            var notification = new Notification
                             {
-                                UserId = adminId,
-                                NotificationId = notification.Id,
-                                IsSent = false
-                            });
+                                Subject = "📚 Nouveau livre ajouté à la bibliothèque",
+                                Content = $"Un nouveau livre/magazine a été ajouté par l'utilisateur {userId} : 📖 {bookMagazine.Title}",
+                                CreatedAt = DateTime.Now,
+                                IsRead = false
+                            };
+
+                            _context.Notifications.Add(notification);
+                            await _context.SaveChangesAsync();
+
+                            // Associer la notification à chaque admin
+                            foreach (var admin in adminUsers)
+                            {
+                                _context.UserNotifications.Add(new UserNotification
+                                {
+                                    UserId = admin.Id,
+                                    NotificationId = notification.Id,
+                                    IsSent = false
+                                });
+                            }
+                            await _context.SaveChangesAsync();
+
+                            // ✅ NOUVEAU : Envoyer les emails aux admins
+                            var emailSubject = "📚 Nouveau livre ajouté à la bibliothèque";
+                            var emailContent = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+        .header {{ text-align: center; color: #333; margin-bottom: 30px; border-bottom: 2px solid #007bff; padding-bottom: 20px; }}
+        .book-info {{ background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #007bff; }}
+        .footer {{ text-align: center; color: #666; font-size: 14px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }}
+        .btn {{ display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; margin-top: 15px; }}
+        .highlight {{ color: #007bff; font-weight: bold; }}
+        .info-row {{ margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>📚 Nouveau livre ajouté !</h1>
+        </div>
+        <p>Bonjour Administrateur,</p>
+        <p>Un nouveau livre/magazine vient d'être ajouté à la bibliothèque numérique :</p>
+        <div class='book-info'>
+            <h3>📖 {bookMagazine.Title}</h3>
+            <div class='info-row'><strong>Auteur :</strong> <span class='highlight'>{author.Name}</span></div>
+            <div class='info-row'><strong>Catégorie :</strong> <span class='highlight'>{category.Name}</span></div>
+            <div class='info-row'><strong>Date d'ajout :</strong> {DateTime.Now:dd/MM/yyyy à HH:mm}</div>
+            <div class='info-row'><strong>Ajouté par :</strong> Utilisateur ID {userId}</div>
+            {(!string.IsNullOrEmpty(model.Description) ? $"<div class='info-row'><strong>Description :</strong> {model.Description}</div>" : "")}
+            {(!string.IsNullOrEmpty(model.Tags) ? $"<div class='info-row'><strong>Tags :</strong> {model.Tags}</div>" : "")}
+        </div>
+        <p>Vous pouvez consulter ce livre et le modérer si nécessaire via votre dashboard administrateur.</p>
+        <p><em>Ce livre est maintenant disponible pour tous les utilisateurs de la bibliothèque.</em></p>
+        <div class='footer'>
+            <p>📧 Ceci est un email automatique de votre Library API</p>
+            <p>📅 Envoyé le {DateTime.Now:dd/MM/yyyy à HH:mm:ss}</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+                            // Envoyer l'email à chaque admin
+                            int emailsSent = 0;
+                            int emailsFailed = 0;
+
+                            foreach (var admin in adminUsers)
+                            {
+                                if (!string.IsNullOrEmpty(admin.Email))
+                                {
+                                    try
+                                    {
+                                        await _emailService.SendEmailAsync(admin.Email, emailSubject, emailContent);
+                                        emailsSent++;
+
+                                        // Log de succès d'envoi
+                                        _logger.LogInformation("✅ Email notification sent to admin {AdminEmail} for new book {BookTitle}",
+                                                              admin.Email, bookMagazine.Title);
+                                    }
+                                    catch (Exception emailEx)
+                                    {
+                                        emailsFailed++;
+                                        // ✅ LOG TECHNIQUE : Erreur d'envoi d'email (non bloquante)
+                                        _logger.LogWarning(emailEx, "⚠️ Failed to send email notification to admin {AdminEmail} for book {BookId}",
+                                                          admin.Email, bookMagazine.Id);
+                                    }
+                                }
+                                else
+                                {
+                                    emailsFailed++;
+                                    _logger.LogWarning("⚠️ Admin user {AdminId} has no email address - cannot send notification", admin.Id);
+                                }
+                            }
+
+                            // Log du résumé d'envoi
+                            _logger.LogInformation("📧 Email notifications summary - Sent: {EmailsSent}, Failed: {EmailsFailed}, Book: {BookTitle}",
+                                                  emailsSent, emailsFailed, bookMagazine.Title);
                         }
-                        await _context.SaveChangesAsync();
                     }
                 }
                 catch (Exception ex)
                 {
-                    // ✅ LOG TECHNIQUE : Erreur dans la création de notifications (non bloquante)
-                    _logger.LogWarning(ex, "⚠️ Failed to create admin notifications for new book upload - BookId: {BookId}", bookMagazine.Id);
+                    // ✅ LOG TECHNIQUE : Erreur dans la création de notifications/emails (non bloquante)
+                    _logger.LogWarning(ex, "⚠️ Failed to create admin notifications/emails for new book upload - BookId: {BookId}", bookMagazine.Id);
                     // Continue sans faire échouer l'upload principal
                 }
 
-                return Ok(new { Message = "Book or magazine added successfully!", CoverImageUrl = coverImagePath });
+                return Ok(new
+                {
+                    Message = "Book or magazine added successfully!",
+                    CoverImageUrl = coverImagePath,
+                    BookId = bookMagazine.Id,
+                    Title = bookMagazine.Title
+                });
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -340,6 +409,7 @@ namespace LibraryAPI.Controllers
                 return StatusCode(500, "An internal error occurred during book upload");
             }
         }
+
 
         /// <summary>
         /// OBTENIR LA LISTE DES LIVRES/MAGAZINES
