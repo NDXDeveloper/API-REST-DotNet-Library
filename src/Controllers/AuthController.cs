@@ -1,16 +1,16 @@
-using Microsoft.AspNetCore.Mvc;  // Pour gérer les contrôleurs et les actions d'API
-using Microsoft.AspNetCore.Identity;  // Pour utiliser Identity (gestion des utilisateurs, rôles, etc.)
-using Microsoft.AspNetCore.Authorization;  // Pour gérer les attributs d'autorisation
-using System.IdentityModel.Tokens.Jwt;  // Pour manipuler les tokens JWT
-using System.Security.Claims;  // Pour créer et gérer les claims dans les tokens JWT
-using Microsoft.IdentityModel.Tokens;  // Pour gérer la validation et la signature des tokens JWT
-using System.Text;  // Pour encoder les clés de sécurité
-using Microsoft.AspNetCore.Http;  // Pour utiliser IFormFile
-using System.IO;  // Pour utiliser Path et FileStream
-using Microsoft.EntityFrameworkCore;
-using LibraryAPI.Data; // Pour utiliser la méthode Include
-using LibraryAPI.Models;
-using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Mvc;             // Pour gérer les contrôleurs et les actions d'API
+using Microsoft.AspNetCore.Identity;        // Pour utiliser Identity (gestion des utilisateurs, rôles, etc.)
+using Microsoft.AspNetCore.Authorization;   // Pour gérer les attributs d'autorisation
+using System.IdentityModel.Tokens.Jwt;      // Pour manipuler les tokens JWT
+using System.Security.Claims;               // Pour créer et gérer les claims dans les tokens JWT
+using Microsoft.IdentityModel.Tokens;       // Pour gérer la validation et la signature des tokens JWT
+using System.Text;                          // Pour encoder les clés de sécurité
+using Microsoft.AspNetCore.Http;            // Pour utiliser IFormFile (upload de fichiers)
+using System.IO;                            // Pour utiliser Path et FileStream (gestion de fichiers)
+using Microsoft.EntityFrameworkCore;        // Pour utiliser Entity Framework Core et les requêtes de base de données        
+using LibraryAPI.Data;                      // Pour utiliser la méthode Include et le contexte ApplicationDbContext
+using LibraryAPI.Models;                    // Pour accéder aux modèles de données (ApplicationUser, AuditActions, etc.)
+using Microsoft.AspNetCore.RateLimiting;    // Pour la limitation du taux de requêtes (protection contre les abus)
 
 namespace LibraryAPI.Controllers
 {
@@ -40,14 +40,39 @@ namespace LibraryAPI.Controllers
     {
         // ===== SERVICES INJECTÉS PAR DÉPENDANCE =====
         
+        /// <summary>
+        /// Gestionnaire des utilisateurs fourni par ASP.NET Core Identity
+        /// Permet de créer, modifier, supprimer des utilisateurs et gérer leurs mots de passe
+        /// </summary>
         private readonly UserManager<ApplicationUser> _userManager;
+
+        /// <summary>
+        /// Gestionnaire de connexion fourni par ASP.NET Core Identity
+        /// Gère les opérations de connexion/déconnexion des utilisateurs
+        /// </summary>
         private readonly SignInManager<ApplicationUser> _signInManager;
+
+        /// <summary>
+        /// Gestionnaire des rôles fourni par ASP.NET Core Identity
+        /// Permet de créer et gérer les rôles (Admin, User, etc.)
+        /// </summary>
         private readonly RoleManager<IdentityRole> _roleManager;
+
+        /// <summary>
+        /// Configuration de l'application (appsettings.json)
+        /// Utilisé pour récupérer les clés JWT, chaînes de connexion, etc.
+        /// </summary>
         private readonly IConfiguration _configuration;
+
+        /// <summary>
+        /// Contexte de base de données Entity Framework
+        /// Permet d'accéder aux tables Users, Roles, UserRoles, etc.
+        /// </summary>
         private readonly ApplicationDbContext _context;
 
         /// <summary>
         /// Service d'envoi d'emails pour les notifications par email
+        /// Utilisé pour envoyer des emails de bienvenue, notifications, etc.
         /// </summary>
         private readonly EmailService _emailService;
         
@@ -66,10 +91,31 @@ namespace LibraryAPI.Controllers
         /// </summary>
         private readonly ILogger<AuthController> _logger;
         
+        /// <summary>
+        /// ✅ SERVICE D'AUDIT - LOGS MÉTIER ET TRAÇABILITÉ
+        /// Utilisé pour :
+        /// - Traçabilité des connexions/déconnexions
+        /// - Audit des inscriptions d'utilisateurs
+        /// - Historique des modifications de profil
+        /// - Conformité réglementaire (RGPD, audit de sécurité)
+        /// - Analyse des patterns d'utilisation
+        /// </summary>
         private readonly AuditLogger _auditLogger;
 
         // ===== CONSTRUCTEUR AVEC INJECTION DE DÉPENDANCES =====
 
+        /// <summary>
+        /// Constructeur du contrôleur avec injection de dépendances
+        /// Tous les services nécessaires sont injectés automatiquement par ASP.NET Core
+        /// </summary>
+        /// <param name="userManager">Gestionnaire des utilisateurs Identity</param>
+        /// <param name="signInManager">Gestionnaire de connexion Identity</param>
+        /// <param name="roleManager">Gestionnaire des rôles Identity</param>
+        /// <param name="configuration">Configuration de l'application</param>
+        /// <param name="context">Contexte de base de données</param>
+        /// <param name="emailService">Service d'envoi d'emails</param>
+        /// <param name="logger">✅ Service de logging pour aspects techniques</param>
+        /// <param name="auditLogger">✅ Service d'audit pour traçabilité métier</param>
         public AuthController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
@@ -79,7 +125,7 @@ namespace LibraryAPI.Controllers
             EmailService emailService,
             ILogger<AuthController> logger,
             AuditLogger auditLogger
-            )  // ✅ Logger pour aspects techniques seulement
+            )  
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -87,50 +133,50 @@ namespace LibraryAPI.Controllers
             _configuration = configuration;
             _context = context;
             _emailService = emailService;
-            _logger = logger;
-            _auditLogger = auditLogger;
+            _logger = logger;               // ✅ Service de logging technique
+            _auditLogger = auditLogger;     // ✅ Service d'audit métier
         }
 
         // ===== MÉTHODES D'AUTHENTIFICATION =====
-        
+
         /// <summary>
         /// INSCRIPTION D'UN NOUVEL UTILISATEUR
         /// Logs techniques : erreurs de création, problèmes de rôles
         /// </summary>
-[HttpPost("register")]
-public async Task<IActionResult> Register([FromBody] RegisterModel model)
-{
-    try
-    {
-        // Création d'un nouvel utilisateur basé sur les données fournies
-        var user = new ApplicationUser
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] RegisterModel model)
         {
-            UserName = model.Email,
-            Email = model.Email,
-            FullName = model.FullName,
-            Description = model.Description
-        };
-
-        // Création de l'utilisateur avec le mot de passe fourni
-        var result = await _userManager.CreateAsync(user, model.Password);
-        
-        if (result.Succeeded)
-        {
-            // Si le rôle "User" n'existe pas, on le crée
-            if (!await _roleManager.RoleExistsAsync("User"))
+            try
             {
-                await _roleManager.CreateAsync(new IdentityRole("User"));
-                // ✅ LOG TECHNIQUE : Création de rôle manquant (problème de configuration)
-                _logger.LogWarning("🔧 Had to create missing 'User' role during registration - check initial setup");
-            }
+                // Création d'un nouvel utilisateur basé sur les données fournies
+                var user = new ApplicationUser
+                {
+                    UserName = model.Email,
+                    Email = model.Email,
+                    FullName = model.FullName,
+                    Description = model.Description
+                };
 
-            // On assigne le rôle "User" au nouvel utilisateur
-            await _userManager.AddToRoleAsync(user, "User");
-            
-            await _auditLogger.LogAsync(AuditActions.REGISTER,
-                    $"Nouvel utilisateur enregistré: {user.Email}");
+                // Création de l'utilisateur avec le mot de passe fourni
+                var result = await _userManager.CreateAsync(user, model.Password);
 
-            // ✅ NOUVEAU : Envoi de l'email de bienvenue
+                if (result.Succeeded)
+                {
+                    // Si le rôle "User" n'existe pas, on le crée
+                    if (!await _roleManager.RoleExistsAsync("User"))
+                    {
+                        await _roleManager.CreateAsync(new IdentityRole("User"));
+                        // ✅ LOG TECHNIQUE : Création de rôle manquant (problème de configuration)
+                        _logger.LogWarning("🔧 Had to create missing 'User' role during registration - check initial setup");
+                    }
+
+                    // On assigne le rôle "User" au nouvel utilisateur
+                    await _userManager.AddToRoleAsync(user, "User");
+
+                    await _auditLogger.LogAsync(AuditActions.REGISTER,
+                            $"Nouvel utilisateur enregistré: {user.Email}");
+
+                    // ✅ NOUVEAU : Envoi de l'email de bienvenue
                     try
                     {
                         var welcomeSubject = "🎉 Bienvenue dans votre Bibliothèque Numérique !";
@@ -384,27 +430,28 @@ public async Task<IActionResult> Register([FromBody] RegisterModel model)
                         // L'inscription continue même si l'email échoue
                     }
 
-            return Ok(new { 
-                Message = "User registered successfully!", 
-                UserId = user.Id,
-                Email = user.Email,
-                FullName = user.FullName
-            });
-        }
+                    return Ok(new
+                    {
+                        Message = "User registered successfully!",
+                        UserId = user.Id,
+                        Email = user.Email,
+                        FullName = user.FullName
+                    });
+                }
 
-        // ✅ LOG TECHNIQUE : Erreurs de validation Identity (problème technique)
-        _logger.LogWarning("⚠️ User registration failed due to Identity validation errors: {Errors}",
-                          string.Join(", ", result.Errors.Select(e => e.Description)));
-        
-        return BadRequest(result.Errors);
-    }
-    catch (Exception ex)
-    {
-        // ✅ LOG TECHNIQUE : Exception non gérée (problème système)
-        _logger.LogError(ex, "❌ Technical error during user registration");
-        return StatusCode(500, "An internal error occurred during registration");
-    }
-}
+                // ✅ LOG TECHNIQUE : Erreurs de validation Identity (problème technique)
+                _logger.LogWarning("⚠️ User registration failed due to Identity validation errors: {Errors}",
+                                  string.Join(", ", result.Errors.Select(e => e.Description)));
+
+                return BadRequest(result.Errors);
+            }
+            catch (Exception ex)
+            {
+                // ✅ LOG TECHNIQUE : Exception non gérée (problème système)
+                _logger.LogError(ex, "❌ Technical error during user registration");
+                return StatusCode(500, "An internal error occurred during registration");
+            }
+        }
 
         /// <summary>
         /// CONNEXION D'UN UTILISATEUR
@@ -887,119 +934,197 @@ public async Task<IActionResult> Register([FromBody] RegisterModel model)
     }
 }
 
-
- /* à envisager :
+/* MÉTHODES À ENVISAGER POUR COMPLÉTER LE CONTRÔLEUR :
+        
         Récupérer la liste des utilisateurs :
-        Dans une méthode pour récupérer tous les utilisateurs (par exemple, GetAllUsers() ou GetUsers()), UserDto est pratique pour filtrer et structurer les informations utilisateur avant de les renvoyer au client.
+        Dans une méthode pour récupérer tous les utilisateurs (par exemple, GetAllUsers() ou GetUsers()), 
+        UserDto est pratique pour filtrer et structurer les informations utilisateur avant de les renvoyer au client.
 
-        Récupérer les informations d’un utilisateur spécifique :
-        Une méthode comme GetUserById() ou GetUserProfile() pourrait utiliser UserDto pour fournir des informations détaillées sur un utilisateur spécifique sans exposer d’informations sensibles.
+        Récupérer les informations d'un utilisateur spécifique :
+        Une méthode comme GetUserById() ou GetUserProfile() pourrait utiliser UserDto pour fournir des 
+        informations détaillées sur un utilisateur spécifique sans exposer d'informations sensibles.
 
         Filtrer les utilisateurs par rôles :
-        Si vous avez une méthode comme GetUsersByRole(string roleName) pour récupérer uniquement les utilisateurs ayant un rôle spécifique, UserDto serait idéal pour structurer la réponse sans exposer l’intégralité des entités ApplicationUser.
+        Si vous avez une méthode comme GetUsersByRole(string roleName) pour récupérer uniquement les 
+        utilisateurs ayant un rôle spécifique, UserDto serait idéal pour structurer la réponse sans 
+        exposer l'intégralité des entités ApplicationUser.
 
         Rechercher des utilisateurs par critères :
-        Une méthode SearchUsers(string query) pourrait utiliser UserDto pour renvoyer des informations utilisateur en réponse à des critères de recherche, limitant les données renvoyées au strict nécessaire.
+        Une méthode SearchUsers(string query) pourrait utiliser UserDto pour renvoyer des informations 
+        utilisateur en réponse à des critères de recherche, limitant les données renvoyées au strict nécessaire.
 
         Afficher l'activité d'un utilisateur :
-        Dans des méthodes pour afficher les activités des utilisateurs, comme l’historique des favoris ou les statistiques d’utilisation, UserDto permet d’inclure seulement les informations essentielles d'un utilisateur.
+        Dans des méthodes pour afficher les activités des utilisateurs, comme l'historique des favoris 
+        ou les statistiques d'utilisation, UserDto permet d'inclure seulement les informations essentielles 
+        d'un utilisateur.
 
         Notifications ou activité récente :
-        Dans des méthodes pour afficher les notifications d’un utilisateur ou l’activité récente, UserDto est utile pour structurer les informations utilisateur dans la réponse de manière sécurisée.
+        Dans des méthodes pour afficher les notifications d'un utilisateur ou l'activité récente, UserDto 
+        est utile pour structurer les informations utilisateur dans la réponse de manière sécurisée.
         */
 
 
         /*
-        ===== MÉTHODES SUPPLÉMENTAIRES À ENVISAGER =====
+        ===== FONCTIONNALITÉS SUPPLÉMENTAIRES À DÉVELOPPER =====
         
         Les commentaires ci-dessous décrivent des fonctionnalités additionnelles
-        qui pourraient être implémentées dans ce contrôleur :
+        qui pourraient être implémentées dans ce contrôleur d'authentification :
 
-        📋 GESTION AVANCÉE DES UTILISATEURS :
-        - Désactivation/réactivation de comptes utilisateur
-        - Réinitialisation de mot de passe par email
+        📋 GESTION AVANCÉE DES COMPTES UTILISATEUR :
+        - Désactivation/réactivation temporaire de comptes utilisateur
+        - Système de réinitialisation de mot de passe par email sécurisé
         - Changement de rôle d'un utilisateur (promotion/rétrogradation)
-        - Suppression définitive d'un compte utilisateur
-        - Statistiques d'utilisation par utilisateur
+        - Suppression définitive d'un compte utilisateur avec confirmation
+        - Statistiques détaillées d'utilisation par utilisateur
 
-        🔐 SÉCURITÉ RENFORCÉE :
-        - Authentification à deux facteurs (2FA)
-        - Historique des connexions
-        - Verrouillage de compte après X tentatives échouées
-        - Détection d'activité suspecte
-        - Invalidation de tokens JWT (blacklist)
+        🔐 RENFORCEMENT DE LA SÉCURITÉ :
+        - Authentification à deux facteurs (2FA) avec QR codes
+        - Historique détaillé des connexions et géolocalisation
+        - Verrouillage automatique de compte après X tentatives échouées
+        - Système de détection d'activité suspecte et alertes
+        - Liste noire de tokens JWT pour invalidation forcée
 
-        📊 ANALYTICS ET MONITORING :
-        - Statistiques de connexion
-        - Utilisateurs les plus actifs
-        - Analyse des tendances d'inscription
-        - Monitoring des erreurs d'authentification
-        - Rapport d'activité administrative
+        📊 ANALYTICS ET SURVEILLANCE :
+        - Tableau de bord des statistiques de connexion
+        - Identification des utilisateurs les plus actifs
+        - Analyse des tendances d'inscription et saisonnalité
+        - Surveillance en temps réel des erreurs d'authentification
+        - Génération de rapports d'activité administrative
 
-        📬 NOTIFICATIONS AVANCÉES :
-        - Envoi d'emails de bienvenue
-        - Notifications de sécurité (nouvelle connexion)
-        - Alertes d'activité suspecte
-        - Newsletters et communications
+        📬 SYSTÈME DE NOTIFICATIONS AVANCÉ :
+        - Emails de bienvenue personnalisés avec templates
+        - Notifications de sécurité (nouvelle connexion, changement de mot de passe)
+        - Alertes automatiques d'activité suspecte
+        - Système de newsletters et communications ciblées
 
-        🎨 PERSONNALISATION :
-        - Thèmes personnalisés par utilisateur
-        - Préférences de langue
-        - Configuration d'affichage
-        - Paramètres de confidentialité
+        🎨 PERSONNALISATION DE L'EXPÉRIENCE :
+        - Thèmes personnalisés par utilisateur (clair/sombre)
+        - Gestion des préférences de langue multilingue
+        - Configuration d'affichage et mise en page
+        - Paramètres de confidentialité granulaires
 
-        EXEMPLE D'IMPLÉMENTATION - Méthode de réinitialisation de mot de passe :
+        EXEMPLE D'IMPLÉMENTATION - Réinitialisation de mot de passe sécurisée :
         
-        [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordModel model)
+        [HttpPost("reset-password-request")]
+        public async Task<IActionResult> RequestPasswordReset([FromBody] ResetPasswordRequestModel model)
         {
-            _logger.LogInformation("🔄 Password reset attempt for email: {Email}", model.Email);
+            _logger.LogInformation("🔄 Demande de réinitialisation de mot de passe pour: {Email}", model.Email);
             
             var user = await _userManager.FindByEmailAsync(model.Email);
             if (user == null)
             {
-                _logger.LogWarning("⚠️ Password reset attempted for non-existent email: {Email}", model.Email);
-                // Ne pas révéler si l'email existe ou non (sécurité)
-                return Ok(new { Message = "If the email exists, a reset link has been sent." });
+                _logger.LogWarning("⚠️ Tentative de réinitialisation pour email inexistant: {Email}", model.Email);
+                // Ne pas révéler si l'email existe ou non (principe de sécurité)
+                return Ok(new { Message = "Si l'email existe, un lien de réinitialisation a été envoyé." });
             }
 
-            // Génération d'un token de réinitialisation
+            // Génération d'un token de réinitialisation sécurisé
             var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             
-            // Envoi d'email avec le lien de réinitialisation
-            // ... code d'envoi d'email ...
+            // Création du lien de réinitialisation avec expiration
+            var resetLink = $"{Request.Scheme}://{Request.Host}/reset-password?token={resetToken}&email={user.Email}";
             
-            _logger.LogInformation("📧 Password reset email sent for user {UserId}", user.Id);
-            return Ok(new { Message = "Password reset email sent successfully." });
+            // Envoi d'email sécurisé avec template HTML
+            await _emailService.SendPasswordResetEmailAsync(user.Email, user.FullName, resetLink);
+            
+            _logger.LogInformation("📧 Email de réinitialisation envoyé à l'utilisateur {UserId}", user.Id);
+            await _auditLogger.LogAsync(AuditActions.PASSWORD_RESET_REQUESTED, 
+                $"Demande de réinitialisation de mot de passe pour: {user.Email}");
+                
+            return Ok(new { Message = "Email de réinitialisation envoyé avec succès." });
+        }
+
+        [HttpPost("reset-password-confirm")]
+        public async Task<IActionResult> ConfirmPasswordReset([FromBody] ResetPasswordConfirmModel model)
+        {
+            try
+            {
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                if (user == null)
+                {
+                    return BadRequest("Utilisateur introuvable.");
+                }
+
+                // Réinitialisation du mot de passe avec le token
+                var result = await _userManager.ResetPasswordAsync(user, model.Token, model.NewPassword);
+                
+                if (result.Succeeded)
+                {
+                    await _auditLogger.LogAsync(AuditActions.PASSWORD_CHANGED,
+                        $"Mot de passe réinitialisé avec succès pour: {user.Email}");
+                    
+                    // Envoi d'email de confirmation
+                    await _emailService.SendPasswordChangedConfirmationAsync(user.Email, user.FullName);
+                    
+                    return Ok(new { Message = "Mot de passe réinitialisé avec succès." });
+                }
+
+                return BadRequest(result.Errors);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Erreur technique lors de la confirmation de réinitialisation");
+                return StatusCode(500, "Erreur interne lors de la réinitialisation du mot de passe");
+            }
         }
         */
 
 /*
+===== SYSTÈME DE LOGGING DUAL IMPLÉMENTÉ =====
 
-✅ LOGS : Logs techniques uniquement :
-- Erreurs d'exception non gérées
-- Problèmes de configuration (JWT, rôles manquants)
-- Erreurs de base de données et requêtes
-- Problèmes filesystem (upload d'images)
-- Erreurs de permissions et I/O
-- Incohérences système critiques
-- Problèmes de performance
+✅ LOGS TECHNIQUES (Serilog) - Diagnostic et maintenance :
+- Erreurs d'exception non gérées et stack traces
+- Problèmes de configuration (clés JWT manquantes, rôles non créés)
+- Erreurs de base de données et problèmes de connexion
+- Problèmes filesystem (permissions, dossiers manquants, uploads)
+- Erreurs de permissions et d'accès aux ressources
+- Incohérences système critiques et états invalides
+- Problèmes de performance et timeouts
 
-===== EXEMPLES DE LOGS GÉNÉRÉS (TECHNIQUES SEULEMENT) =====
+✅ LOGS D'AUDIT (Base de données) - Traçabilité et conformité :
+- Connexions et déconnexions d'utilisateurs
+- Inscriptions de nouveaux comptes
+- Modifications de profils utilisateur
+- Actions administratives (changements de rôles, etc.)
+- Conformité réglementaire (RGPD, audit de sécurité)
 
-[15:30:16 WRN] 🔧 Had to create missing 'User' role during registration - check initial setup
-[15:32:46 ERR] 🚨 Critical system inconsistency: PasswordSignIn succeeded but FindByEmail failed for user@example.com
-[15:35:20 WRN] 📁 Had to create missing uploads directory: wwwroot/images/profiles - check deployment setup  
-[15:36:12 ERR] ❌ File system permission error during profile picture upload
-[15:40:15 ERR] 🚨 Database context configuration error: UserRoles or Roles is null
-[15:45:30 ERR] 🚨 JWT Key is not configured in appsettings - authentication will fail
+===== EXEMPLES DE LOGS TECHNIQUES GÉNÉRÉS =====
 
-CES LOGS AIDENT À :
-✅ Détecter les problèmes de configuration
-✅ Identifier les erreurs système
-✅ Monitorer les performances
-✅ Diagnostiquer les pannes
-✅ Assurer la maintenance technique
+[15:30:16 WRN] 🔧 Rôle 'User' manquant créé lors de l'inscription - vérifier la configuration initiale
+[15:32:46 ERR] 🚨 Incohérence système critique: PasswordSignIn réussi mais FindByEmail échoué pour user@exemple.com
+[15:35:20 WRN] 📁 Création du dossier d'upload manquant: wwwroot/images/profiles - vérifier le déploiement
+[15:36:12 ERR] ❌ Erreur de permissions système lors de l'upload d'image de profil
+[15:40:15 ERR] 🚨 Erreur de configuration du contexte BDD: UserRoles ou Roles est null
+[15:45:30 ERR] 🚨 Clé JWT non configurée dans appsettings - l'authentification échouera
+[15:50:22 INF] ✅ Email de bienvenue envoyé avec succès au nouvel utilisateur john@exemple.com (ID: abc123)
+[15:55:10 WRN] ⚠️ Échec d'envoi de l'email de bienvenue au nouvel utilisateur marie@exemple.com (ID: def456)
 
+CES LOGS PERMETTENT DE :
+✅ Détecter rapidement les problèmes de configuration
+✅ Identifier les erreurs système avant qu'elles n'affectent les utilisateurs
+✅ Surveiller les performances et la disponibilité
+✅ Diagnostiquer les pannes et résoudre les incidents
+✅ Assurer une maintenance technique proactive
+✅ Garantir la qualité de service
+
+===== BÉNÉFICES DE CETTE ARCHITECTURE =====
+
+🔧 MAINTENANCE TECHNIQUE :
+- Détection précoce des problèmes système
+- Diagnostic rapide des pannes et erreurs
+- Surveillance de la santé de l'application
+- Optimisation continue des performances
+
+📊 CONFORMITÉ ET AUDIT :
+- Traçabilité complète des actions utilisateur
+- Respect des exigences réglementaires (RGPD)
+- Audit de sécurité et investigations
+- Analyse des patterns d'utilisation
+
+💡 AMÉLIORATION CONTINUE :
+- Identification des points de friction utilisateur
+- Optimisation de l'expérience d'inscription
+- Amélioration de la sécurité basée sur les données
+- Évolution guidée par les métriques d'usage
 
 */

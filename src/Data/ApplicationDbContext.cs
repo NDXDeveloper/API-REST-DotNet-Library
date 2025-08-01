@@ -36,7 +36,7 @@ namespace LibraryAPI.Data
         // Nouvelle table pour stocker les UUIDs générés
         public DbSet<FileUuid> FileUuids { get; set; }
 
-        public DbSet<CoverImageUuid> CoverImageUuids { get; set; }  // Nouvelle table pour les UUID des images
+        public DbSet<CoverImageUuid> CoverImageUuids { get; set; }  // Nouvelle table pour les UUID des images de couverture du livre
 
         // Ajout des tables pour les notes et commentaires
         public DbSet<Rating> Ratings { get; set; }

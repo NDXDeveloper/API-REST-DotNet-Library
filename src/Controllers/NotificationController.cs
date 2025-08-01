@@ -1,12 +1,12 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Linq;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;  // Gère l'authentification et l'autorisation des utilisateurs (attributs [Authorize])
+using Microsoft.AspNetCore.Mvc;            // Fournit les outils pour créer des contrôleurs API et gérer les actions HTTP
+using Microsoft.EntityFrameworkCore;       // Permet l'utilisation d'Entity Framework Core pour interagir avec la base de données
+using System.Linq;                         // Méthodes d'extension LINQ pour les requêtes sur les collections et bases de données
+using System.Threading.Tasks;              // Support pour la programmation asynchrone avec async/await
 using System.Security.Claims; // Utilisé pour manipuler les informations des utilisateurs (claims) dans les tokens d'authentification, comme l'identifiant de l'utilisateur (UserId).
-using LibraryAPI.Data;
-using LibraryAPI.Models;
-using Microsoft.AspNetCore.RateLimiting;
+using LibraryAPI.Data;                     // Contexte de base de données de l'application (ApplicationDbContext)
+using LibraryAPI.Models;                   // Modèles de données de l'application (Notification, UserNotification, AuditActions, etc.)
+using Microsoft.AspNetCore.RateLimiting;   // Services de limitation du taux de requêtes pour éviter les abus
 
 namespace LibraryAPI.Controllers
 {
@@ -61,6 +61,14 @@ namespace LibraryAPI.Controllers
         /// </summary>
         private readonly ILogger<NotificationController> _logger;
         
+        /// <summary>
+        /// ✅ SERVICE D'AUDIT - LOGS MÉTIER ET TRAÇABILITÉ
+        /// Utilisé pour :
+        /// - Traçabilité des actions métier (qui crée/envoie des notifications)
+        /// - Audit de sécurité (accès aux fonctions admin)
+        /// - Historique des opérations importantes
+        /// - Conformité réglementaire
+        /// </summary>
         private readonly AuditLogger _auditLogger;
 
         // ===== CONSTRUCTEUR =====
@@ -71,12 +79,13 @@ namespace LibraryAPI.Controllers
         /// <param name="context">Contexte de base de données</param>
         /// <param name="emailService">Service d'envoi d'emails</param>
         /// <param name="logger">✅ Service de logging pour aspects techniques</param>
+        /// <param name="auditLogger">✅ Service d'audit pour traçabilité métier</param>
         public NotificationController(ApplicationDbContext context, EmailService emailService, ILogger<NotificationController> logger, AuditLogger auditLogger)
         {
             _context = context;
             _emailService = emailService;
             _logger = logger;  // ✅ Ajout du service de logging technique
-            _auditLogger = auditLogger;
+            _auditLogger = auditLogger;  // ✅ Ajout du service d'audit métier
         }
 
         // ===== MÉTHODES DE GESTION DES NOTIFICATIONS =====
@@ -385,9 +394,9 @@ namespace LibraryAPI.Controllers
 }
 
 /*
-===== LOGS TECHNIQUES AJOUTÉS DANS CE CONTRÔLEUR =====
+===== SYSTÈME DUAL DE LOGGING DANS CE CONTRÔLEUR =====
 
-✅ LOGS TECHNIQUES (Serilog) :
+✅ LOGS TECHNIQUES (Serilog - _logger) :
 - Erreurs de base de données (DbUpdateException, connexion, transactions)
 - Problèmes d'envoi d'emails (SMTP, TimeoutException, NetworkException)
 - Erreurs de configuration EmailService (InvalidOperationException)
@@ -397,14 +406,14 @@ namespace LibraryAPI.Controllers
 - Statistiques techniques d'envoi d'emails pour monitoring
 - Erreurs de validation d'arguments
 
-❌ LOGS D'AUDIT NON INCLUS :
-- Qui crée quelles notifications
-- Qui lit quelles notifications et quand
-- Statistiques d'utilisation des notifications
-- Historique des envois d'emails
-- Analytics métier
+✅ LOGS D'AUDIT (AuditLogger - _auditLogger) :
+- Création de notifications par les administrateurs
+- Envoi massif d'emails de notification
+- Marquage des notifications comme lues par les utilisateurs
+- Traçabilité des actions administratives
+- Audit de conformité réglementaire
 
-===== EXEMPLES DE LOGS TECHNIQUES GÉNÉRÉS =====
+===== EXEMPLES DE LOGS TECHNIQUES GÉNÉRÉS (Serilog) =====
 
 [15:30:16 WRN] ⚠️ No users found in database when creating notification - potential data issue
 [15:32:45 ERR] ❌ Database error while creating notification
@@ -414,7 +423,14 @@ namespace LibraryAPI.Controllers
 [15:45:15 ERR] 🚨 UserNotification exists but Notification is null - data integrity error
 [15:50:20 ERR] ❌ Concurrency error while marking notification as read - NotificationId: 789
 
-CES LOGS AIDENT À :
+===== EXEMPLES DE LOGS D'AUDIT GÉNÉRÉS (Base de données) =====
+
+Action: NOTIFICATION_SENT | Message: "Notification créée et envoyée à 150 utilisateurs" | UserId: admin123
+Action: NOTIFICATION_SENT | Message: "Envoi d'emails terminé: 145 envoyés, 3 ignorés, 2 échoués" | UserId: admin123
+
+===== OBJECTIFS DE CHAQUE SYSTÈME =====
+
+🔧 LOGS TECHNIQUES (Serilog) AIDENT À :
 ✅ Détecter les problèmes de configuration SMTP
 ✅ Identifier les incohérences de données
 ✅ Surveiller les performances d'envoi d'emails
@@ -422,12 +438,187 @@ CES LOGS AIDENT À :
 ✅ Monitorer l'intégrité des relations EF
 ✅ Détecter les problèmes de concurrence
 
-AMÉLIORATIONS APPORTÉES :
+📊 LOGS D'AUDIT (AuditLogger) AIDENT À :
+✅ Traçabilité complète des actions administratives
+✅ Conformité réglementaire (RGPD, audit de sécurité)
+✅ Analyse des patterns d'utilisation des notifications
+✅ Historique des communications avec les utilisateurs
+✅ Audit de sécurité (qui fait quoi, quand)
+
+===== AMÉLIORATIONS TECHNIQUES APPORTÉES =====
+
+✅ Double système de logging complémentaire
 ✅ Gestion d'erreurs granulaire pour chaque type d'exception
 ✅ Validation des données nulles et références cassées
 ✅ Statistiques d'envoi d'emails pour monitoring
 ✅ Gestion des timeouts SMTP et erreurs réseau
 ✅ Détection des problèmes d'intégrité de données
 ✅ Meilleure utilisation d'async/await pour les performances
+✅ Traçabilité métier complète pour conformité
+
+===== UTILISATION PRATIQUE =====
+
+🔍 Pour diagnostiquer un problème technique :
+→ Consulter les logs Serilog dans les fichiers logs/
+
+📋 Pour un audit ou conformité :
+→ Consulter la table AuditLogs via /api/admin/audit/logs
+
+💡 Les deux systèmes sont complémentaires et servent des objectifs différents
+   mais essentiels pour une application en production robuste.
+
+===== CONFIGURATION RECOMMANDÉE =====
+
+🔧 CONFIGURATION SERILOG (appsettings.json) :
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "System": "Warning",
+        "LibraryAPI.Controllers.NotificationController": "Debug"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/notifications-.log",
+          "rollingInterval": "Day",
+          "retainedFileCountLimit": 30,
+          "formatter": "Serilog.Formatting.Compact.CompactJsonFormatter, Serilog.Formatting.Compact"
+        }
+      },
+      {
+        "Name": "Console",
+        "Args": {
+          "theme": "Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme::Code, Serilog.Sinks.Console"
+        }
+      }
+    ],
+    "Enrich": ["FromLogContext", "WithMachineName", "WithThreadId"]
+  }
+}
+
+📊 STRUCTURE TABLE AUDITLOGS :
+CREATE TABLE AuditLogs (
+    Id int IDENTITY(1,1) PRIMARY KEY,
+    UserId nvarchar(256) NOT NULL,
+    Action nvarchar(100) NOT NULL,
+    Message nvarchar(max) NULL,
+    Timestamp datetime2 NOT NULL DEFAULT GETUTCDATE(),
+    IpAddress nvarchar(45) NULL,
+    UserAgent nvarchar(500) NULL,
+    AdditionalData nvarchar(max) NULL
+);
+
+===== MONITORING ET ALERTES =====
+
+⚠️ ALERTES AUTOMATIQUES À CONFIGURER :
+- Taux d'échec d'envoi d'emails > 10% en 1h
+- Plus de 5 erreurs de base de données en 5min
+- Détection de données null/corrompues
+- Timeouts SMTP répétés (> 3 en 10min)
+- Tentatives d'accès non autorisées répétées
+
+📈 MÉTRIQUES IMPORTANTES À SURVEILLER :
+- Temps de réponse moyen des endpoints
+- Nombre de notifications créées par heure
+- Taux de succès d'envoi d'emails
+- Nombre d'utilisateurs actifs (marquage comme lu)
+- Volume de logs d'erreurs par type
+
+===== EXEMPLES DE REQUÊTES D'ANALYSE =====
+
+🔍 ANALYSE DES LOGS TECHNIQUES (Serilog via Seq/Grafana) :
+- Erreurs par type : @Level = "Error" | group by @Message
+- Performance emails : @Message like "%Email sending completed%" | stats avg(EmailsSent)
+- Intégrité données : @Message like "%data integrity%" | count
+
+📋 ANALYSE DES LOGS D'AUDIT (SQL) :
+-- Top actions par utilisateur
+SELECT UserId, Action, COUNT(*) as ActionCount 
+FROM AuditLogs 
+WHERE Timestamp >= DATEADD(day, -7, GETUTCDATE())
+GROUP BY UserId, Action
+ORDER BY ActionCount DESC;
+
+-- Analyse des notifications par période
+SELECT 
+    DATEPART(hour, Timestamp) as Hour,
+    COUNT(*) as NotificationsSent
+FROM AuditLogs 
+WHERE Action = 'NOTIFICATION_SENT'
+AND Timestamp >= DATEADD(day, -1, GETUTCDATE())
+GROUP BY DATEPART(hour, Timestamp)
+ORDER BY Hour;
+
+===== BONNES PRATIQUES DE MAINTENANCE =====
+
+🧹 NETTOYAGE AUTOMATIQUE :
+- Logs Serilog : Rotation automatique (30 jours configuré)
+- Logs d'audit : Archivage après 2 ans (conformité RGPD)
+- Notifications lues : Purge après 6 mois (configurable)
+
+🔒 SÉCURITÉ DES LOGS :
+- Logs techniques : Accès restreint aux DevOps
+- Logs d'audit : Chiffrement au repos + accès traçable
+- Rotation des clés de chiffrement tous les 6 mois
+- Sauvegarde des logs critiques vers stockage immutable
+
+⚡ OPTIMISATION PERFORMANCE :
+- Index sur AuditLogs.Timestamp et AuditLogs.UserId
+- Partitioning des logs par mois (volumes importants)
+- Compression des anciens logs
+- Cache des statistiques fréquemment consultées
+
+===== DÉPANNAGE COURANT =====
+
+❌ PROBLÈMES FRÉQUENTS ET SOLUTIONS :
+
+1. "SMTP timeout" répétés :
+   → Vérifier configuration SMTP et firewall
+   → Augmenter timeout dans EmailService
+   → Implémenter retry avec backoff exponentiel
+
+2. "Data integrity issue" :
+   → Vérifier contraintes foreign key
+   → Audit des suppressions en cascade
+   → Mise en place de soft delete
+
+3. "Database error while creating notification" :
+   → Vérifier espace disque et connexions DB
+   → Analyser les deadlocks dans SQL Server
+   → Optimiser les index sur tables Notifications
+
+4. Logs d'audit manquants :
+   → Vérifier injection de dépendance AuditLogger
+   → Contrôler les transactions et rollbacks
+   → Valider la configuration de base de données
+
+5. Performance dégradée :
+   → Analyser les requêtes lentes dans logs
+   → Vérifier la pagination des notifications
+   → Optimiser les requêtes Entity Framework
+
+===== ÉVOLUTIONS FUTURES RECOMMANDÉES =====
+
+🚀 AMÉLIORATIONS PLANNIFIÉES :
+- Implémentation d'un système de retry pour les emails
+- Ajout de métriques Prometheus/Grafana
+- Notifications en temps réel avec SignalR
+- Système de templates pour les notifications
+- API de reporting avancé pour les audits
+- Intégration avec systèmes externes (Slack, Teams)
+- Notifications push mobile
+- Système de préférences utilisateur (fréquence, canaux)
+
+📊 BUSINESS INTELLIGENCE :
+- Dashboard temps réel des notifications
+- Analyse prédictive des patterns de lecture
+- Segmentation automatique des utilisateurs
+- A/B testing sur les contenus de notifications
+- Analyse de sentiment sur les retours utilisateurs
 
 */

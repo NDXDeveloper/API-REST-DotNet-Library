@@ -1,4 +1,3 @@
-// ===== IMPORTS NÉCESSAIRES =====
 using System.Security.Claims;   // Pour récupérer les informations de l'utilisateur connecté (ID, nom, etc.)
 using Serilog;                  // Système de logging avancé pour enregistrer les erreurs et événements
 

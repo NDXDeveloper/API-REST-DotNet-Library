@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Authorization; // Nécessaire pour gérer l'authentif
 using Microsoft.AspNetCore.Mvc; // Fournit les outils pour créer des API RESTful, comme les contrôleurs et les actions HTTP (GET, POST, etc.).
 using Microsoft.EntityFrameworkCore; // Permet d'utiliser Entity Framework Core pour interagir avec la base de données via le contexte de données (ApplicationDbContext).
 using System.Security.Claims; // Utilisé pour manipuler les informations des utilisateurs (claims) dans les tokens d'authentification, comme l'identifiant de l'utilisateur (UserId).
-using LibraryAPI.Data;
-using LibraryAPI.Models;
-using Microsoft.AspNetCore.RateLimiting;
+using LibraryAPI.Data; // Référence au contexte de base de données de l'application
+using LibraryAPI.Models; // Référence aux modèles de données (entités) de l'application
+using Microsoft.AspNetCore.RateLimiting; // Permet d'implémenter la limitation du taux de requêtes pour éviter les abus
 
 namespace LibraryAPI.Controllers
 {
@@ -53,6 +53,10 @@ namespace LibraryAPI.Controllers
         /// </summary>
         private readonly ILogger<FavoritesController> _logger;
         
+        /// <summary>
+        /// Service d'audit dédié pour tracer les actions métier des utilisateurs
+        /// Utilisé pour enregistrer qui fait quoi dans les favoris (ajout/suppression)
+        /// </summary>
         private readonly AuditLogger _auditLogger;
 
         // ===== CONSTRUCTEUR =====
@@ -62,11 +66,12 @@ namespace LibraryAPI.Controllers
         /// </summary>
         /// <param name="context">Contexte de base de données</param>
         /// <param name="logger">✅ Service de logging pour aspects techniques</param>
+        /// <param name="auditLogger">Service d'audit pour tracer les actions utilisateur</param>
         public FavoritesController(ApplicationDbContext context, ILogger<FavoritesController> logger, AuditLogger auditLogger)
         {
-            _context = context;
-            _logger = logger;  // ✅ Ajout du service de logging technique
-            _auditLogger = auditLogger; 
+            _context = context; // Initialisation du contexte de base de données
+            _logger = logger; // ✅ Ajout du service de logging technique
+            _auditLogger = auditLogger; // Initialisation du service d'audit métier
         }
 
         // ===== MÉTHODES DE GESTION DES FAVORIS =====
@@ -316,38 +321,40 @@ namespace LibraryAPI.Controllers
 }
 
 /*
-===== LOGS TECHNIQUES AJOUTÉS DANS CE CONTRÔLEUR =====
+===== DOCUMENTATION DES LOGS IMPLÉMENTÉS DANS CE CONTRÔLEUR =====
 
-✅ LOGS TECHNIQUES (Serilog) :
-- Token JWT invalide/malformé (problème d'authentification système)
-- Erreurs de base de données (DbUpdateException, connexion, transactions)
-- Problèmes de requêtes LINQ/EF (InvalidOperationException, navigation properties)
-- Incohérences de données (favoris avec BookMagazine null)
-- Erreurs de concurrence (DbUpdateConcurrencyException)
-- Erreurs de configuration (ArgumentNullException)
-- Exceptions non prévues (catch général)
+✅ LOGS TECHNIQUES (Serilog - _logger) - Aspects système et infrastructure :
+- Tokens JWT invalides/malformés (problèmes d'authentification système)
+- Erreurs de base de données (DbUpdateException, problèmes de connexion, transactions)
+- Problèmes de requêtes LINQ/EF (InvalidOperationException, propriétés de navigation)
+- Incohérences de données (favoris avec BookMagazine null - intégrité référentielle)
+- Erreurs de concurrence (DbUpdateConcurrencyException lors des suppressions)
+- Erreurs de configuration (ArgumentNullException dans les paramètres)
+- Exceptions non prévues (gestion générique des erreurs inattendues)
 
-❌ LOGS D'AUDIT NON INCLUS :
-- Qui ajoute quoi aux favoris
-- Statistiques d'utilisation des favoris
-- Historique des modifications
-- Préférences utilisateur
-- Analytics métier
+✅ LOGS D'AUDIT MÉTIER (AuditLogger - _auditLogger) - Actions utilisateur :
+- Ajout de livre aux favoris : "Livre ajouté aux favoris: ID {bookMagazineId}"
+- Suppression de livre des favoris : "Livre retiré des favoris: ID {bookMagazineId}"
+- Traçabilité des actions métier pour compliance et historique
 
-===== EXEMPLES DE LOGS TECHNIQUES GÉNÉRÉS =====
+===== EXEMPLES DE LOGS GÉNÉRÉS =====
 
+📊 LOGS D'AUDIT (AuditLogger) :
+[2025-08-01 15:30:16] [AUDIT] [FAVORITE_ADDED] User: user123 - Livre ajouté aux favoris: ID 456
+[2025-08-01 15:35:42] [AUDIT] [FAVORITE_REMOVED] User: user123 - Livre retiré des favoris: ID 456
+
+🔧 LOGS TECHNIQUES (Serilog) :
 [15:30:16 WRN] ⚠️ AddFavorite called with invalid or missing user token
 [15:32:45 ERR] ❌ Database error while adding favorite - BookMagazineId: 123
 [15:35:20 WRN] ⚠️ Found 3 favorites with null BookMagazine references for user abc123 - data integrity issue
 [15:40:10 ERR] ❌ Concurrency error while removing favorite - BookMagazineId: 456
 [15:45:30 ERR] ❌ Invalid operation during favorites retrieval - possible navigation property issue
 
-CES LOGS AIDENT À :
-✅ Détecter les problèmes de configuration JWT
-✅ Identifier les erreurs de base de données
-✅ Surveiller l'intégrité des données
-✅ Diagnostiquer les problèmes de performance
-✅ Détecter les incohérences de relations EF
+===== UTILITÉ DES LOGS =====
+📊 LOGS D'AUDIT : Compliance, historique métier, traçabilité des actions utilisateur
+🔧 LOGS TECHNIQUES : Détection problèmes système, monitoring santé application, diagnostic erreurs
 
-
+===== DOUBLE SYSTÈME DE LOGGING =====
+🔧 Serilog Logger (_logger) : Problèmes techniques et infrastructure uniquement
+📊 Audit Logger (_auditLogger) : Actions métier et traçabilité utilisateur
 */
