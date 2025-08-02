@@ -16,6 +16,8 @@ using Microsoft.OpenApi.Models;
 using LibraryAPI.Models;
 using LibraryAPI.Data;
 
+using LibraryAPI.Services; // utilisé pour services de nettoyage et d'archivage automatique en arrière-plan
+
 // ✅ IMPORTS POUR LA VALIDATION RENFORCÉE
 // Importation des filtres de validation personnalisés
 using LibraryAPI.Filters;
@@ -302,6 +304,12 @@ builder.Services.AddScoped<EmailService>();
 
 builder.Services.AddHttpContextAccessor(); // pas sûr que ce soit utile ici ...
 builder.Services.AddScoped<AuditLogger>();
+
+// Ajout du service d'archivage automatique en arrière-plan
+builder.Services.AddScoped<AuditArchiveService>();
+
+// Ajout du service de nettoyage automatique en arrière-plan
+builder.Services.AddHostedService<AuditCleanupService>();
 
 // Configuration des politiques de limitation de taux pour protéger l'API contre les abus
 // Le rate limiting permet de contrôler le nombre de requêtes par utilisateur/IP dans un intervalle de temps donné
