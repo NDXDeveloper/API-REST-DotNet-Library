@@ -901,12 +901,17 @@ namespace LibraryAPI.Controllers
                 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
                 var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+                var expiryHours = _configuration.GetValue<int>("Jwt:ExpiryHours", 3); // 3h par défaut
+
+
+
                 // Création du token JWT
                 var token = new JwtSecurityToken(
                     issuer: issuer,
                     audience: audience,
                     claims: claims,
-                    expires: DateTime.UtcNow.AddHours(3),
+                    //expires: DateTime.UtcNow.AddHours(3),
+                    expires: DateTime.UtcNow.AddHours(expiryHours),
                     signingCredentials: creds
                 );
 

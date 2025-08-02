@@ -219,6 +219,13 @@ AppPackages/
 BundleArtifacts/
 Package.StoreAssociation.xml
 _pkginfo.txt
+
+bin/
+obj/
+*.user
+*.vs/
+*.txt
+*.kate-swp
 *.appx
 *.appxbundle
 *.appxupload
@@ -389,4 +396,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+
 
