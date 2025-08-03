@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -25,6 +25,7 @@
     <Authors>Nicolas DEOUX</Authors>
     <Copyright>© 2025 Nicolas DEOUX</Copyright>
     <Description>API REST pour la gestion de livres et magazines</Description>
+    <UserSecretsId>04601f9f-b4af-439f-8204-127afba62905</UserSecretsId>
   </PropertyGroup>
 
   <!-- Métadonnées Git incluses dans l'assembly -->
