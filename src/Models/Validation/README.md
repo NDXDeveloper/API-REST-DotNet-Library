@@ -172,7 +172,7 @@ public class BookMagazineModel
 {
     [Required]
     [FileValidation(
-        MaxSize = 100 * 1024 * 1024, // 100MB
+        MaxSize = 25 * 1024 * 1024, // 25MB
         AllowedExtensions = new[] { ".pdf", ".epub", ".mobi", ".txt", ".doc", ".docx" },
         AllowedMimeTypes = new[] {
             "application/pdf",
