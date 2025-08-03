@@ -186,14 +186,17 @@ builder.Services.AddAuthentication(options =>
 // Configuration de CORS avec une politique pour les endpoints publics
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("PublicApiPolicy", builder =>
+    options.AddPolicy("PublicApiPolicy", corsBuilder =>
     {
+        // Récupération des origines autorisées depuis la configuration
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() 
+                           ?? new[] { "https://localhost:3000" };
+        
         // Définit les origines autorisées à accéder à l'API (ici, un site de confiance)
-        builder.WithOrigins("https://trustedwebsite.com")
-               // Autorise tous les en-têtes HTTP
-               .AllowAnyHeader()
-               // Autorise toutes les méthodes HTTP (GET, POST, PUT, DELETE, etc.)
-               .AllowAnyMethod();
+        //builder.WithOrigins(builder.Configuration.GetValue<string>("Cors:AllowedOrigins", "https://localhost:3000"))
+        corsBuilder.WithOrigins(allowedOrigins)
+                   .AllowAnyHeader()        // Autorise tous les en-têtes HTTP
+                   .AllowAnyMethod();       // Autorise toutes les méthodes HTTP (GET, POST, PUT, DELETE, etc.)
     });
 });
 
